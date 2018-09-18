@@ -1,0 +1,148 @@
+---
+title: "EDA_1"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r library}
+library(tidyverse)
+library(lubridate)
+```
+
+```{r アンケートデータ}
+quest <- read_csv("data/raw/ProfileData.csv",
+                  locale = locale(encoding = "shift-jis"),
+                  col_names = FALSE)
+colnames(quest) <- c("世帯No", "個人No", "中分類コード", "アイテムコード", "カテゴリコード")
+write_csv(quest, "data/raw/ProfileData.csv")
+```
+
+```{r アンケートマスタ}
+quest_mst <- read.csv("data/raw/ProfileMaster.csv", 
+                      header = FALSE,
+                      fileEncoding = "SHIFT-JIS") %>% 
+  as_tibble()
+colnames(quest_mst) <- c("中分類コード", "中分類名称", "アイテムコード", "アイテム名称", "MA/SA",
+                         "カテゴリコード", "カテゴリ名称")
+write_csv(quest_mst, "data/raw/ProfileMaster.csv")
+```
+
+```{r 局マスタ}
+sta <- read_csv("data/raw/sta_mst.csv",
+                   locale = locale(encoding = "shift-jis"),
+                col_names = FALSE)
+colnames(sta) <- c("局コード", "局名称", "局略称")
+write_csv(sta, "data/raw/sta_mst.csv")
+```
+
+```{r 職業マスタ} 
+job <- read_csv("data/raw/job_mst.csv",
+                locale = locale(encoding = "shift-jis"),
+                col_names = FALSE)
+colnames(job) <- c("職業コード", "職業名称")
+write_csv(job, "data/raw/job.csv")
+```
+
+```{r 番組分類マスタ}
+bancluster <- read_csv("data/raw/bancluster_mst.csv",
+                       locale = locale(encoding = "shift-jis"),
+                       col_names = FALSE)
+colnames(bancluster) <- c("大分類コード", "中分類コード", "分類コード", "分類名称")
+write_csv(bancluster, "data/raw/bancluster.csv")
+```
+
+```{r 広告主マスタ}
+advertiser <- read_csv("data/raw/M_CM_TV_ADVERTISER.csv",
+                       locale = locale(encoding = "shift-jis"),
+                       col_names = FALSE)
+colnames(advertiser) <- c("広告主コード", "広告主カナ名称", "広告主漢字名称", "初出稿日", "最終出稿日")
+write_csv(advertiser, "data/raw/M_CM_TV_ADVERTISER.csv")
+```
+
+
+```{r 銘柄マスタ}
+brand <- read_csv("data/raw/M_CM_TV_BRAND.csv",
+                  locale = locale(encoding = "shift-jis"),
+                  col_names = FALSE)
+colnames(brand) <- c("銘柄コード", "広告主コード", "銘柄カナ名称", "銘柄漢字名称", "初出稿日", "最終出稿日")
+write_csv(brand, "data/raw/M_CM_TV_BRAND.csv")
+```
+
+
+```{r CM時点データ}
+jiten <- read_csv("data/raw/jiten_data.csv", 
+                  col_names = FALSE, 
+                  locale = locale(encoding = "shift-jis")) %>% 
+  select(-X1)
+colnames(jiten) <- c("局コード", "放送日", "CM挿入時刻", "広告種類", "広告主コード", "銘柄コード", "CM秒数")
+write_csv(jiten, "data/raw/jiten_data.csv")
+```
+
+```{r 番組情報}
+tv1 <- read_csv("data/raw/番組情報/tv_program_0000_part_00.csv", col_names = F)
+tv2 <- read_csv("data/raw/番組情報/tv_program_0001_part_00.csv", col_names = F)
+tv3 <- read_csv("data/raw/番組情報/tv_program_0002_part_00.csv", col_names = F)
+tv4 <- read_csv("data/raw/番組情報/tv_program_0003_part_00.csv", col_names = F)
+
+tv <- bind_rows(tv1, tv2, tv3, tv4)
+colnames(tv) <- c("局コード", "番組コード", "曜日コード", "放送日", "開始時刻",
+                   "放送分数", "終了時刻", "大分類コード", "中分類コード",
+                  "分類コード", "新番特番フラグ", "放送形式", "最終回コード",
+                  "番組漢字名称", "番組カナ名称")
+write_csv(tv, "data/raw/program.csv")
+```
+
+```{r 基本情報}
+cv1 <- read_csv("data/raw/基本情報/tv_smple_p_cv_0000_part_00.csv", col_names = F)
+cv2 <- read_csv("data/raw/基本情報/tv_sample_p_cv_0001_part_00.csv", col_names = F)
+cv3 <- read_csv("data/raw/基本情報/tv_sample_p_cv_0002_part_00.csv", col_names = F)
+cv4 <- read_csv("data/raw/基本情報/tv_sample_p_cv_0003_part_00.csv", col_names = F)
+
+# 15列目と16列目被ってる
+# 値が1種類しかない列がたくさんある
+# X8が4水準あって謎すぎる．世帯主・主婦コード？2*2 = 4水準？
+# X5のdate型が謎すぎる
+# 個人Noはどこへ？？
+
+cv <- bind_rows(cv1, cv2, cv3, cv4) %>% 
+  select(X1, X3, X5, X8, X10, X11, X14, X16)
+colnames(tv) <- c("日付", "世帯No", "", "世帯主主婦コード", "性別", "未既婚", "年齢", "職業コード")
+write_csv(tv, "data/raw/tv_program.csv")
+```
+
+
+```{r テレビ接触ログ}
+orgn1 <- read_csv("data/raw/テレビ接触ログ/tv_orgn_p_cv_0000_part_00.csv", col_names = F)
+orgn2 <- read_csv("data/raw/テレビ接触ログ/tv_orgn_p_cv_0001_part_00.csv", col_names = F)
+orgn3 <- read_csv("data/raw/テレビ接触ログ/tv_orgn_p_cv_0002_part_00.csv", col_names = F)
+orgn4 <- read_csv("data/raw/テレビ接触ログ/tv_orgn_p_cv_0003_part_00.csv", col_names = F)
+
+orgn <- bind_rows(orgn1, orgn2, orgn3, orgn4) %>% .[,-1]
+rm(list = c("orgn1", "orgn2", "orgn3", "orgn4"))
+colnames(orgn) <- c("放送日", "曜日", "世帯No", "個人No", "開始時刻", "終了時刻", 
+                  "局コード", "TVNo", "データ集計区分", "データSeq")
+write_csv(orgn, "data/raw/orgn.csv")
+```
+
+```{r TV再生ログ}
+# またしても個人Noが一種類しかない．おそらくX6
+# X1は一種類の値(900)しかない
+# 結合にはかなり時間がかかりそうなので後回し
+
+play1 <- read_csv("data/raw/テレビ再生ログ/tv_play_p_cv_0000_part_00.csv", col_names = FALSE)
+play <- bind_rows(play1) %>% 
+  select(-X1)
+colnames(play) <- c("行動日", "曜日", "行動時刻", "世帯No", "個人No", "TVNo", "局コード", 
+                    "タイムシフト放送日", "タイムシフト曜日", "タイムシフト放送時刻")
+
+```
+
+```{r WEBサイト閲覧ログ}
+
+```
+
