@@ -1,0 +1,17 @@
+library(tidyverse)
+library(lubridate)
+
+pro <- read_csv("data/raw/program.csv")
+
+pro %>% 
+  summarise_if(is.numeric, c("min", "max", "mean"), na.rm=TRUE)
+
+# NA込みのuniqueの数
+pro %>% 
+  apply(2, function(x) sum(!is.na(unique(x))))
+ban %>% 
+  apply(2, function(x) length(unique(x)))
+
+pro %>% 
+  mutate(開始時刻 = as.integer(開始時刻)) %>% 
+  summarise_at(c("開始時刻", "放送分数"), funs(min, max, mean), na.rm=TRUE)
