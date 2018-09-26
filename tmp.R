@@ -15,3 +15,13 @@ ban %>%
 pro %>% 
   mutate(開始時刻 = as.integer(開始時刻)) %>% 
   summarise_at(c("開始時刻", "放送分数"), funs(min, max, mean), na.rm=TRUE)
+
+jiten <- read_csv("data/raw/jiten_data.csv")
+
+pro %>% 
+  filter(is.na(番組漢字名称))
+
+
+# 空き番組をViewに
+# sin_tokuとfinal_codeをバイナリ
+# 放送形式のNULLを0に
