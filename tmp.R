@@ -25,3 +25,9 @@ pro %>%
 # 空き番組をViewに
 # sin_tokuとfinal_codeをバイナリ
 # 放送形式のNULLを0に
+
+dim(jiten)
+jiten %>% 
+  group_by(銘柄コード, 放送日, CM挿入時刻) %>% 
+  summarise(count = n()) %>% 
+  arrange(desc(count))
