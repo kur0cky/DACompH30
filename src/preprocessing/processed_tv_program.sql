@@ -11,14 +11,14 @@ CREATE TABLE processed.tv_program
 		ban_code1 integer,
 		ban_code2 integer,
 		ban_code3 character(3),
-		sin_toku integer,
+		sin_toku character(1),
 		br_format integer,
 		final_code integer,
 		program_name character(41),
 		program_name_kana character(20),
-		PRIMARY KEY(station_code, program_code, program_date)
---		FOREIGN KEY(ban_code1, ban_code2, ban_code3) REFERENCES processed.bancluster_mst(ban_code1, ban_code2, ban_code3),
---		FOREIGN KEY(station_code) REFERENCES processed.sta_mst(station_code)
+		PRIMARY KEY(station_code, program_code, program_date),
+		FOREIGN KEY(ban_code1, ban_code2, ban_code3) REFERENCES processed.bancluster_mst(ban_code1, ban_code2, ban_code3),
+		FOREIGN KEY(station_code) REFERENCES processed.sta_mst(station_code)
 	);
 	
 INSERT INTO processed.tv_program
@@ -41,9 +41,9 @@ SELECT
 	TO_NUMBER(ban_code1, '9'),
 	TO_NUMBER(ban_code2, '99'),
 	ban_code3,
-	CASE WHEN sin_toku IS NULL THEN 1 ELSE 0 END,
-	TO_NUMBER(br_format, '9'),
-	TO_NUMBER(final_code, '9'),
+	CASE WHEN sin_toku IS NULL THEN 'N' ELSE sin_toku END,
+	CASE WHEN br_format IS NULL THEN 0 ELSE TO_NUMBER(br_format, '9') END,
+	CASE WHEN final_code IS NULL THEN 0 ELSE TO_NUMBER(final_code, '9') END,
 	program_name,
 	program_name_kana
 FROM
