@@ -1,0 +1,483 @@
+---
+title: "EDA_tv_play"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+```
+
+# はじめに
+
+## setup
+
+```{r ,include = FALSE, echo=TRUE}
+library(knitr)
+library(tidyverse)
+library(lubridate)
+library(dbplyr)
+library(dbplot)
+library(RPostgreSQL)
+
+theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
+```
+
+```{r db_connection}
+dbDisconnect(con$con)
+dbDisconnect(conn)
+con <- src_postgres(
+  "video",
+  host = "133.31.57.120",
+  port = 5222,
+  user = "m1",
+  password = "shi0hama")
+conn <- dbConnect(PostgreSQL(),
+                  host="133.31.57.120",
+                  port=5222, 
+                  dbname="video", 
+                  user="m1", 
+                  password="shi0hama")
+```
+
+```{r get_data}
+play <- con %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_play_p_cv")) 
+sta <- con %>% 
+  tbl(from = dbplyr::in_schema("processed", "sta_mst"))
+sample <- con %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_sample_p_cv"))
+orgn <- con %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_orgn_p_cv"))
+program <- con %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_program"))
+```
+
+## tv_play データ
+
+TV再生ログが入っている．カラムは
+
+- action_datetime：行動日時
+- action_day_week：行動曜日
+- house_num：世帯id
+- tv_num：テレビid
+- station_code：放送局id
+- timeshift_datetime：タイムシフト放送日
+- timeshift_date_week：タイムシフト放送曜日
+- action_date：行動日
+
+の8列．レコード数は44170240．
+
+以下疑問点
+
+- そもそもなんのテーブルなのか
+- データが記録されるメカニズムが分からない
+- action_datetimeが**視聴し始めた日時**でtimeshift_datetimeが**放送日時？**
+- たとえばチャンネルを変えたときはどうなるの
+- 「ある局を何時から何時まで見た」という情報は得られない？
+- TV接触ログがそれに相当？
+- だとしたら違いはなんだろう
+
+# カラムごと
+
+
+## action_datetime
+
+タイムシフト視聴したときのtimestamp
+
+- min : 2017-04-03 05:00:00
+- max : 2018-04-02 04:59:00
+
+```{r action_datetime_summary}
+play %>% 
+  summarise(min_action_datetime = min(action_datetime, na.rm=TRUE),
+            median_action_datetime = median(action_datetime),
+            max_action_datetime = max(action_datetime, na.rm=TRUE))
+```
+
+### daily(日付)
+
+```{r count_date}
+count_date1 <- dbGetQuery(conn, "
+           SELECT
+             CAST(action_datetime as DATE),
+             COUNT (*)
+           FROM
+             processed.tv_play_p_cv
+           GROUP BY
+             CAST(action_datetime as DATE)
+           ")
+count_date1 %>% 
+  ggplot(aes(action_datetime, count))+
+  geom_smooth()+
+  geom_line()+
+  theme_bw()+
+  scale_y_continuous(limits = c(0,210000)) 
+```
+
+### action_date（業界日付）
+
+```{r count_date2}
+count_date2 <- dbGetQuery(conn, "
+                         SELECT
+                           action_date,
+                           COUNT(*)
+                         FROM
+                           processed.tv_play_p_cv
+                         GROUP BY
+                           action_date")
+count_date2 %>% 
+  ggplot(aes(action_date, count))+
+  geom_line()+
+  theme_bw()+
+  geom_smooth()+
+  scale_y_continuous(limits = c(0,210000))
+```
+
+### weekly
+
+```{r}
+count_weekly <- dbGetQuery(conn, "
+                           SELECT
+                             EXTRACT(YEAR FROM action_datetime) as year,
+                             EXTRACT(WEEK FROM action_datetime) as week,
+                             COUNT(*)
+                           FROM 
+                             processed.tv_play_p_cv
+                           GROUP BY
+                             EXTRACT(WEEK FROM action_datetime),
+                             EXTRACT(YEAR FROM action_datetime)
+                           ")
+count_weekly %>% 
+  arrange(year, week) %>% 
+  mutate(index = 1:n()) %>% 
+  ggplot(aes(index, count))+
+  geom_line()+
+  theme_bw()
+```
+
+### monthly
+
+```{r}
+count_monthly <- dbGetQuery(conn,
+                            "
+                            SELECT
+                              EXTRACT(YEAR FROM action_datetime) as year,
+                              EXTRACT(MONTH FROM action_datetime) as month,
+                              COUNT(*)
+                            FROM
+                              processed.tv_play_p_cv
+                            GROUP BY
+                              EXTRACT(MONTH FROM action_datetime),
+                              EXTRACT(YEAR FROM action_datetime)
+                            ")
+count_monthly %>% 
+  mutate(date = make_date(year, month)) %>% 
+  ggplot(aes(date, count))+
+  geom_line()+
+  theme_bw()
+```
+
+### day of week
+
+```{r}
+count_wday <- dbGetQuery(conn,"
+                         SELECT 
+                           EXTRACT(DOW FROM action_datetime) as wday,
+                           COUNT (*)
+                        FROM
+                          processed.tv_play_p_cv
+                        GROUP BY
+                          EXTRACT(DOW FROM action_datetime)")
+count_wday %>% 
+  arrange(wday) %>% 
+  mutate(wday = wday(wday+1, label = TRUE)) %>% 
+  ggplot(aes(wday, count))+
+  geom_bar(sta = "identity")
+```
+
+
+### action_day_week（業界日付）
+
+曜日
+
+- 1が月曜日で7が日曜日
+- 日曜日のレコードが最も多い
+- 土曜日が二番目
+- 月曜日が三番目
+- 他はだいたい同じ
+- 月曜日が平日の中でも多いのは月9の影響？
+- 日曜日 > 土曜日 なのが意外
+
+```{r}
+count_day_week <- dbGetQuery(conn,"
+                          SELECT
+                            action_day_week,
+                            COUNT(*)
+                          FROM
+                            processed.tv_play_p_cv
+                          GROUP BY
+                            action_day_week")
+count_day_week %>% 
+  as_tibble() %>% 
+  mutate(action_day_week = wday(action_day_week, label = T)) %>% 
+  ggplot(aes(action_day_week, count))+
+  geom_bar(stat = "identity")+
+  theme_bw()
+```
+
+### hour
+
+```{r count_hourly}
+count_hourly <- dbGetQuery(conn,"
+                           SELECT
+                             EXTRACT(HOUR FROM action_datetime),
+                             COUNT(*)
+                           FROM 
+                             processed.tv_play_p_cv
+                           GROUP BY
+                             EXTRACT(HOUR FROM action_datetime)")
+count_hourly %>% 
+  as_tibble() %>% 
+  rename(hour = date_part) %>% 
+  ggplot(aes(hour, count))+
+  geom_bar(stat = "identity")
+```
+
+
+## timeshift_datetime
+
+タイムシフトで見た番組の放送timestamp
+
+- min : 2017-03-27 05:30:00
+- median : 2017-10-05 21:59:00
+- max : 2018-04-02 02:37:00
+
+```{r action_datetime_summary}
+play %>% 
+  summarise(min_timeshift_datetime = min(timeshift_datetime, na.rm=TRUE),
+            median_timeshift_datetime = median(timeshift_datetime),
+            max_timeshift_datetime = max(timeshift_datetime, na.rm=TRUE))
+```
+
+### daily(日付)
+
+```{r ts_count_date}
+ts_count_date1 <- dbGetQuery(conn, "
+           SELECT
+             CAST(timeshift_datetime as DATE),
+             COUNT (*)
+           FROM
+             processed.tv_play_p_cv
+           GROUP BY
+             CAST(timeshift_datetime as DATE)
+           ")
+ts_count_date1 %>% 
+  ggplot(aes(timeshift_datetime, count))+
+  geom_smooth()+
+  geom_line()+
+  theme_bw()+
+  scale_y_continuous(limits = c(0,210000)) 
+```
+
+
+### weekly
+
+```{r ts_count_weekly}
+ts_count_weekly <- dbGetQuery(conn, "
+                           SELECT
+                             EXTRACT(YEAR FROM timeshift_datetime) as year,
+                             EXTRACT(WEEK FROM timeshift_datetime) as week,
+                             COUNT(*)
+                           FROM 
+                             processed.tv_play_p_cv
+                           GROUP BY
+                             EXTRACT(WEEK FROM timeshift_datetime),
+                             EXTRACT(YEAR FROM timeshift_datetime)
+                           ")
+ts_count_weekly %>% 
+  arrange(year, week) %>% 
+  mutate(index = 1:n()) %>% 
+  ggplot(aes(index, count))+
+  geom_line()+
+  theme_bw()
+```
+
+### monthly
+
+```{r ts_count_monthly}
+ts_count_monthly <- dbGetQuery(conn,
+                            "
+                            SELECT
+                              EXTRACT(YEAR FROM timeshift_datetime) as year,
+                              EXTRACT(MONTH FROM timeshift_datetime) as month,
+                              COUNT(*)
+                            FROM
+                              processed.tv_play_p_cv
+                            GROUP BY
+                              EXTRACT(MONTH FROM timeshift_datetime),
+                              EXTRACT(YEAR FROM timeshift_datetime)
+                            ")
+ts_count_monthly %>% 
+  mutate(date = make_date(year, month)) %>% 
+  ggplot(aes(date, count))+
+  geom_line()+
+  theme_bw()
+```
+
+### day of week
+
+- 土曜の深夜に見てるのが絶対に日曜日に影響してる
+- timeshiftの方にも業界日付が欲しいところ
+
+```{r ts_count_wday}
+ts_count_wday <- dbGetQuery(conn,"
+                         SELECT 
+                           EXTRACT(DOW FROM timeshift_datetime) as wday,
+                           COUNT (*)
+                        FROM
+                          processed.tv_play_p_cv
+                        GROUP BY
+                          EXTRACT(DOW FROM timeshift_datetime)")
+ts_count_wday %>% 
+  arrange(wday) %>% 
+  mutate(wday = wday(wday+1, label = TRUE)) %>% 
+  ggplot(aes(wday, count))+
+  geom_bar(sta = "identity")
+```
+
+### hour
+
+- これめっちゃ比較するべき
+- タイムシフトで見る番組は21時あたりに集中している
+- 一方タイムシフトで見る時間はもっと滑らかになる
+
+```{r ts_count_hourly}
+ts_count_hourly <- dbGetQuery(conn,"
+                           SELECT
+                             EXTRACT(HOUR FROM timeshift_datetime),
+                             COUNT(*)
+                           FROM 
+                             processed.tv_play_p_cv
+                           GROUP BY
+                             EXTRACT(HOUR FROM timeshift_datetime)")
+ts_count_hourly %>% 
+  as_tibble() %>% 
+  rename(hour = date_part) %>% 
+  ggplot(aes(hour, count))+
+  geom_bar(stat = "identity")
+```
+
+## house_num
+
+- ユニークなhouse_numは5933
+
+house_numごとのレコード数を集計
+
+- median < mean が顕著
+- 220329回もテレビ付けるやつがいるらしい
+
+```{r count_house_num}
+count_house_num <- play %>% 
+  group_by(house_num) %>% 
+  summarise(n = n()) %>% 
+  collect()
+
+count_house_num %>% 
+  summarise(min = min(n),
+            q10 = quantile(n, .1),
+            median = median(n),
+            mean = mean(n),
+            q90 = quantile(n, .9),
+            max = max(n),
+            sd = sd(n)) %>% 
+  round() %>% 
+  kable()
+```
+
+続いて，ヒストグラムをプロットしてみる
+
+- 予想通り，かなり右に裾がひろい
+
+```{r}
+count_house_num %>% 
+  ggplot(aes(n))+
+  geom_histogram()+
+  labs(x = "n_play")
+count_house_num %>% 
+  ggplot(aes(n))+
+  geom_histogram(bins = 25)+
+  labs(x = "n_play")+
+  scale_x_continuous(limits = c(0,50000))
+```
+
+## tv_num
+
+- 当然tv_num = 1がもっとも多い．
+
+```{r}
+play %>% 
+  group_by(tv_num) %>% 
+  summarise(count = n()) %>% 
+  kable()
+```
+
+house_numごとにmax(tv_num)を算出して集計
+
+```{r}
+play %>% 
+  group_by(house_num) %>% 
+  mutate(max_tv_num = max(tv_num)) %>% 
+  group_by(max_tv_num) %>% 
+  summarise(n = n()) %>% 
+  kable()
+```
+
+## station_code
+
+- 日テレ, フジ, テレ朝の3強か
+
+```{r}
+play %>% 
+  group_by(station_code) %>% 
+  summarise(count = n()) %>% 
+  left_join(sta, by = "station_code") %>% 
+  select(-station_jp) %>% 
+  kable()
+
+play %>% 
+  left_join(sta, by = "station_code") %>% 
+  dbplot_bar(station_ab)
+```
+
+
+## timeshift_datetime
+
+タイムシフト視聴の，もとの放送timestamp
+
+- min : 2017-03-27 05:30:00
+- max : 2018-04-02 02:37:00
+- minを見れば分かるが, 計測期間以前の放送が当然ある
+
+```{r}
+play %>% 
+  rename(timeshift_datetime = timesfhit_datetime) %>% 
+  summarise(max_timeshift_datetime = max(timeshift_datetime),
+            min_timeshift_datetime = min(timeshift_datetime))
+```
+
+## action_date
+
+日次レコード数を算出
+
+- 年末が多く，それ以外は週の周期が強そう
+- なんともいえない
+
+```{r}
+play %>% 
+  dbplot_bar(action_date)+
+  theme_bw()+
+  scale_x_date(date_breaks = "3 month")
+```
+
