@@ -21,12 +21,10 @@ library(dbplyr)
 library(dbplot)
 library(RPostgreSQL)
 
-theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
 ```
 
 ```{r db_connection}
-dbDisconnect(con$con)
-dbDisconnect(conn)
+
 con <- src_postgres(
   "video",
   host = "133.31.57.120",
@@ -452,32 +450,31 @@ play %>%
 ```
 
 
-## timeshift_datetime
 
-タイムシフト視聴の，もとの放送timestamp
+# 2変量
 
-- min : 2017-03-27 05:30:00
-- max : 2018-04-02 02:37:00
-- minを見れば分かるが, 計測期間以前の放送が当然ある
+## action_timeshift 
 
 ```{r}
-play %>% 
-  rename(timeshift_datetime = timesfhit_datetime) %>% 
-  summarise(max_timeshift_datetime = max(timeshift_datetime),
-            min_timeshift_datetime = min(timeshift_datetime))
-```
+act_ts <- dbGetQuery(conn,"
+                     SELECT
+                       EXTRACT(HOUR FROM action_datetime) as act_hour,
+                       EXTRACT(HOUR FROM timeshift_datetime) as ts_hour,
+                       COUNT(*)
+                     FROM
+                       processed.tv_play_p_cv
+                     GROUP BY
+                       EXTRACT(HOUR FROM action_datetime),
+                       EXTRACT(HOUR FROM timeshift_datetime)")
 
-## action_date
+act_ts %>% 
+  ggplot(aes(act_hour, ts_hour))+
+  geom_point(aes(size = count))+
+  geom_abline(colour = "blue")
+act_ts %>% 
+  ggplot(aes(act_hour, ts_hour))+
+  geom_raster(aes(fill = count))
 
-日次レコード数を算出
 
-- 年末が多く，それ以外は週の周期が強そう
-- なんともいえない
-
-```{r}
-play %>% 
-  dbplot_bar(action_date)+
-  theme_bw()+
-  scale_x_date(date_breaks = "3 month")
 ```
 
