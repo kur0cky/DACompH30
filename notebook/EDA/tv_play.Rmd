@@ -6,7 +6,9 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, eval = FALSE)
+knitr::opts_chunk$set(echo = FALSE, 
+                      warning = FALSE,
+                      message = FALSE)
 ```
 
 # はじめに
@@ -21,6 +23,7 @@ library(dbplyr)
 library(dbplot)
 library(RPostgreSQL)
 
+theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
 ```
 
 ```{r db_connection}
@@ -252,7 +255,7 @@ count_hourly %>%
 - median : 2017-10-05 21:59:00
 - max : 2018-04-02 02:37:00
 
-```{r action_datetime_summary}
+```{r timeshift_datetime_summary}
 play %>% 
   summarise(min_timeshift_datetime = min(timeshift_datetime, na.rm=TRUE),
             median_timeshift_datetime = median(timeshift_datetime),
@@ -436,7 +439,7 @@ play %>%
 
 - 日テレ, フジ, テレ朝の3強か
 
-```{r}
+```{r count_station}
 play %>% 
   group_by(station_code) %>% 
   summarise(count = n()) %>% 
@@ -455,7 +458,7 @@ play %>%
 
 ## action_timeshift 
 
-```{r}
+```{r act_ts_hourly}
 act_ts <- dbGetQuery(conn,"
                      SELECT
                        EXTRACT(HOUR FROM action_datetime) as act_hour,
