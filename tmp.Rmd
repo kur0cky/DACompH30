@@ -1,0 +1,104 @@
+---
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r library}
+library(tidyverse)
+theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
+```
+
+```{r data_import}
+prof_data <- read_csv("data/processed/profiledata.csv")
+prof_mst <- read_csv("data/processed/profilemaster.csv")
+data <- prof_data %>% 
+  left_join(prof_mst, by = c("qu_genre_code", "question_code", "answer_code"))
+```
+
+# メディア関連項目＜接触頻度＞
+
+
+
+### graph {data-width=1000}
+
+```{r }
+data %>% 
+  filter(qu_genre_code == 4) %>% 
+  group_by(question, answer) %>% 
+  count() %>% 
+  group_by(question) %>% 
+  mutate(rate =  n / sum(n),
+         answer = if_else(str_detect(answer, pattern="全く"),
+                          "全くない",
+                          answer)) %>% 
+  ggplot(aes(answer, rate))+
+  geom_bar(stat = "identity")+
+  facet_wrap(~question)+
+  coord_flip()+
+  theme(text = element_text(size=8))
+```
+
+
+
+### comment
+
+- ほぼ全てのメディアにおいて，選択肢が集中する
+
+
+
+# メディア関連項目＜接触時間量＞
+
+### graph {data-width=1000}
+
+```{r }
+data %>% 
+  filter(qu_genre_code == 5) %>% 
+  group_by(question, answer) %>% 
+  count() %>% 
+  group_by(question) %>% 
+  mutate(rate =  n / sum(n),
+         answer = if_else(str_detect(answer, pattern="全く"),
+                          "全くない",
+                          answer)) %>% 
+  ggplot(aes(answer, rate))+
+  geom_bar(stat = "identity")+
+  facet_wrap(~question)+
+  coord_flip()+
+  theme(text = element_text(size = 8))
+```
+
+### comment
+
+# テレビ関連項目
+
+### graph
+
+```{r }
+data %>% 
+  filter(qu_genre_code == 6) %>% 
+  group_by(question, answer) %>% 
+  count() %>% 
+  group_by(question) %>% 
+  mutate(rate =  n / sum(n),
+         answer = if_else(str_detect(answer, pattern="全く"),
+                          "全くない",
+                          answer)) %>% 
+  ggplot(aes(answer, rate))+
+  geom_bar(stat = "identity")+
+  facet_wrap(~question)+
+  coord_flip()
+```
+
+### comment
+
+# テレビ関連項目（BS・CS・専門チャンネル）
+
+# 動画配信サービス 
+
+# 新聞関連項目
+
+# 雑誌関連項目

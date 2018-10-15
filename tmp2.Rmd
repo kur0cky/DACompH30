@@ -1,0 +1,301 @@
+---
+title: "EDA about profile"
+author: "kur0cky"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    social: menu
+    source_code: embed
+runtime: shiny
+---
+
+```{r global, include=FALSE}
+# load data in 'global' chunk so it can be shared by all users of the dashboard
+library(dplyr)
+library(readr)
+library(stringr)
+library(ggplot2)
+theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
+prof_data <- read_csv("data/processed/profiledata.csv")
+prof_mst <- read_csv("data/processed/profilemaster.csv")
+data <- prof_data %>% 
+  left_join(prof_mst, by = c("qu_genre_code", "question_code", "answer_code"))
+```
+# メディア接触頻度 
+
+## Inputs {.sidebar}
+
+```{r}
+ selectInput("question4", label = h3("question"), 
+    choices = prof_mst %>% 
+         filter(qu_genre_code == 4) %>% 
+         .$question %>% 
+         unique() %>% 
+         c() %>%  sort() %>%  
+         as.list()
+    , 
+    selected = 1)
+
+```
+
+## left{data-width=1000}
+
+### graph
+
+```{r}
+question4 <- reactive(input$question4)
+renderPlot(
+  data %>% 
+  filter(question == question4()) %>% 
+  mutate(n_house = length(unique(house_num))) %>% 
+  group_by(answer, house_num) %>% 
+  summarise(n = n(),
+            n_house = n_house[1]) %>% 
+  summarise(n = sum(n),
+            rate = n / n_house[1]) %>% 
+  arrange(desc(rate)) %>% 
+    ggplot(aes(answer, rate, fill=n))+
+    geom_bar(stat = "identity")+
+    coord_flip()+
+    theme(text = element_text(size=15))+
+    scale_fill_viridis_c()+
+    scale_y_continuous(limits=c(0,1))
+
+)
+```
+
+## right
+
+
+
+### comment
+
+```{r}
+renderPrint({question4()})
+```
+
+
+# メディア接触時間量
+
+## Inputs {.sidebar}
+
+```{r}
+ selectInput("question5", label = h3("question"), 
+    choices = prof_mst %>% 
+         filter(qu_genre_code == 5) %>% 
+         .$question %>% 
+         unique() %>% 
+         c() %>%  sort() %>%  
+         as.list()
+    , 
+    selected = 1)
+
+```
+
+## left{data-width=1000}
+
+### graph
+
+```{r}
+question5 <- reactive(input$question5)
+renderPlot(
+  data %>% 
+  filter(question == question5()) %>% 
+  mutate(n_house = length(unique(house_num))) %>% 
+  group_by(answer, house_num) %>% 
+  summarise(n = n(),
+            n_house = n_house[1]) %>% 
+  summarise(n = sum(n),
+            rate = n / n_house[1]) %>% 
+  arrange(desc(rate)) %>% 
+    ggplot(aes(answer, rate, fill=n))+
+    geom_bar(stat = "identity")+
+    coord_flip()+
+    theme(text = element_text(size=15))+
+    scale_fill_viridis_c()
+)
+```
+
+## right
+
+### comment
+
+# テレビ関連
+
+## Inputs {.sidebar}
+
+```{r}
+ selectInput("question6", label = h3("question"), 
+    choices = prof_mst %>% 
+         filter(qu_genre_code == 6) %>% 
+         .$question %>% 
+         unique() %>% 
+         c() %>%  sort() %>%  
+         as.list()
+    , 
+    selected = 1)
+
+```
+
+## left{data-width=800}
+
+### graph
+
+```{r}
+question6 <- reactive(input$question6)
+renderPlot(
+  data %>% 
+  filter(question == question6()) %>% 
+  mutate(n_house = length(unique(house_num))) %>% 
+  group_by(answer, house_num) %>% 
+  summarise(n = n(),
+            n_house = n_house[1]) %>% 
+  summarise(n = sum(n),
+            rate = n / n_house[1]) %>% 
+  arrange(desc(rate)) %>% 
+    ggplot(aes(answer, rate, fill=n))+
+    geom_bar(stat = "identity")+
+    coord_flip()+
+    theme(text = element_text(size=12))+
+    scale_fill_viridis_c()
+)
+```
+
+## right
+
+### graph2（項目ごと放送局の該当数）
+```{r}
+renderPlot(
+  data %>% 
+  filter(str_detect(question, pattern = "テレビ局イメージ")) %>% 
+  group_by(question) %>% 
+  summarise(count_house = length(unique(house_num))) %>% 
+  left_join(data, by = "question") %>% 
+  mutate(question = str_sub(question, 10, -2)) %>% 
+  group_by(question, answer) %>% 
+  summarise(count = n(),
+            count_house = count_house[1]) %>% 
+  mutate(rate = count / count_house) %>% 
+  ggplot(aes(question, rate, fill=count))+
+  geom_bar(stat = "identity")+
+  facet_wrap(~answer, ncol = 5)+
+  coord_flip()+
+  theme(text = element_text(size=10),
+        legend.position = "none")+
+  labs(title = "テレビ局イメージ")+
+  scale_fill_viridis_c()
+)
+```
+
+# テレビ関連（BS・CS・専門）
+
+## Inputs {.sidebar}
+
+```{r}
+ selectInput("question7", label = h3("question"), 
+    choices = prof_mst %>% 
+         filter(qu_genre_code == 7) %>% 
+         .$question %>% 
+         unique() %>% 
+         c() %>%  sort() %>%  
+         as.list()
+    , 
+    selected = 1)
+
+```
+
+## left{data-width=1000}
+
+### graph
+
+```{r}
+question7 <- reactive(input$question7)
+renderPlot(
+  data %>% 
+  filter(question == question7()) %>% 
+  mutate(n_house = length(unique(house_num))) %>% 
+  group_by(answer, house_num) %>% 
+  summarise(n = n(),
+            n_house = n_house[1]) %>% 
+  summarise(n = sum(n),
+            rate = n / n_house[1]) %>% 
+  arrange(desc(rate)) %>% 
+    ggplot(aes(answer, rate, fill=n))+
+    geom_bar(stat = "identity")+
+    coord_flip()+
+    theme(text = element_text(size=15))+
+    scale_fill_viridis_c()
+)
+```
+
+## right
+
+### comment
+
+# SNS関連
+
+## Inputs {.sidebar}
+
+```{r}
+ selectInput("question32", label = h3("question"), 
+    choices = prof_mst %>% 
+         filter(qu_genre_code == 32) %>% 
+         .$question %>% 
+         unique() %>% 
+         c() %>%  sort() %>%  
+         as.list()
+    , 
+    selected = 1)
+
+```
+
+## left{data-width=600}
+
+### graph
+
+```{r}
+question32 <- reactive(input$question32)
+renderPlot(
+  data %>% 
+  filter(question == question32()) %>% 
+  mutate(n_house = length(unique(house_num))) %>% 
+  group_by(answer, house_num) %>% 
+  summarise(n = n(),
+            n_house = n_house[1]) %>% 
+  summarise(n = sum(n),
+            rate = n / n_house[1]) %>% 
+  arrange(desc(rate)) %>% 
+    ggplot(aes(answer, rate, fill=n))+
+    geom_bar(stat = "identity")+
+    coord_flip()+
+    theme(text = element_text(size=15))+
+    scale_fill_viridis_c()
+)
+```
+
+## right
+
+### graph2（使用目的ごとSNSの該当数）
+
+```{r}
+renderPlot(
+  data %>% 
+    filter(qu_genre_code == 32, question_type == "MA") %>% 
+    group_by(question) %>% 
+    count(house_num) %>% 
+    summarise(count_house = n()) %>% 
+    left_join(data, by = "question") %>% 
+    group_by(question, answer) %>% 
+    summarise(count = n(),
+              count_house = count_house[1],
+              rate = count /count_house) %>% 
+    ungroup() %>% 
+    mutate(question = str_sub(question, 9, -2)) %>% 
+    ggplot(aes(question, rate, fill=count))+
+    geom_bar(stat = "identity")+
+    facet_wrap(~answer)+
+    coord_flip()+
+    scale_fill_viridis_c()
+)
+```
+

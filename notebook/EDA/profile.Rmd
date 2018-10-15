@@ -1,0 +1,173 @@
+---
+title: "EDA about profile"
+output:
+  html_document:
+    number_sections: true
+    fig_caption: true
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    fig_width: 7
+    fig_height: 4.5
+    theme: cosmo
+    highlight: tango
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+md_extensions: -ascii_identifiers
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE)
+
+library(tidyverse)
+library(knitr)
+
+theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
+
+prof_data <- read_csv("data/processed/profiledata.csv")
+prof_mst <- read_csv("data/processed/profilemaster.csv")
+data <- prof_data %>% 
+  left_join(prof_mst, by = c("qu_genre_code", "question_code", "answer_code"))
+```
+
+# introduction
+
+このレポートはアンケートデータ
+
+- profile_data
+- profile_master
+
+についての概観を行うものである．  
+本レポートの構成は以下のようになっている
+
+## question genre{.tabset .tabset-fade .tabset-pills}
+
+アンケートの質問は`qu_genre`で大まかに分類される
+
+私見では，役に立つのは 1 ~ 11, 25, 32 ぐらい．それ以外は使いにくい
+
+```{r}
+prof_mst %>% 
+  group_by(qu_genre_code, qu_genre,
+           question_code) %>% 
+  summarise() %>% 
+  summarise(質問数 = n()) %>% 
+  kable()
+```
+
+### Overview
+
+各アンケート分類についての概観
+
+1. フェース項目：世帯の物理特性について（家族構成，経済状況）
+2. 生活行動：起床在宅時間
+3. 意識項目：人生観，価値観について（**メディア関係のものが含まれる**）
+4. メディア関連項目（頻度）：メディアに触れる頻度（テレビ・スマホ・タブレット・PC・PHS・新聞・雑誌・電車・チラシ・ラジオ）
+5. メディア関連項目（時間）：メディアに触れる時間（同上）
+6. テレビ関連項目：各放送局のイメージ and 好きなジャンル・放送局について
+7. テレビ関連項目（BS・CS・専門チャンネル）：各BS・CSの加入期間 and 視聴可能チャンネルについて
+8. 動画配信サービス：動画配信サービスの利用や認知について（Youyube, Hulu, Abema）
+9. 新聞関連項目：何の新聞を読んでいるかについて（曜日・朝刊夕刊ごと）
+10. 雑誌関連項目：どのぐらいの頻度で雑誌を読むか，何を読むか（週刊，隔週刊，月刊）
+11. インターネット関連項目：アプリごとに，どのぐらいの頻度で利用するか(SNS，ゲーム，動画配信等)
+12. 通販関連：通販の利用頻度や購入メディア
+13. 商品・サービス関連：日々の購買についていろいろ
+14. 
+23. 
+25. クラスター分類：**ビデオリサーチが提供するナゾのクラスタ**．
+27. 
+32. SNS関連項目：SNS利用方法・頻度（Facebook, Twitter, Instagram）
+
+### utilization (personal opinion)
+
+アンケートをどのように活かしていくかについての私見
+
+- 1.フェース項目：物理的な特性であるため，標本情報の充実に使える
+- 2.生活行動, 3.意識項目：生活上の特性であるため，ステータスにはなり得ないがユーザーのクラスタリング等に使えるかも．
+このデータについての分析を，他のログデータと合わせて解析することが考えられる．
+- 4~11, 32：各種メディアとの接し方．こちらも生活上の特性であるが．はっきりとメディア関連であることから利用しやすいかも．
+このデータについての分析を，他のログデータと合わせて解析することが考えられる．
+- 16：謎のクラスタ．正直使ってみたい
+
+## question type{.tabset .tabset-fade .tabset-pills}
+
+本アンケートには自由記述式がないが，単回答式と複数回答式が存在する．
+それぞれの注意点について簡単に述べる
+
+### single answer
+
+基本的に普通に集計するだけでよい．項目ごとに
+
+- 回答数
+- 総計に対する比率
+
+を集計する．
+
+### multi answer
+
+一人で複数項目を選択できる．そのため単回答式と同じ集計を行うとまずい  
+具体的には，多く選択する人の影響が大きくなる．そのため
+
+- 回答数
+- 回答者数のうち何人が回答したか
+
+を集計するのがのぞましい
+
+**円グラフは絶対に使わない**
+
+# summarise
+
+ここからは，面白そうな質問に限って紹介していく
+
+## SNS関連項目{.tabset}
+
+- instagramは他に比べて利用者に偏りがある．若干知名度が低い
+- Twitterは他に比べて1日数回以上利用する人が多い
+- Facebookは利用していてもたまにしか利用しない人が多い
+
+### Frequency of use
+
+```{r}
+data %>% 
+  filter(qu_genre_code == 32,
+         question_type == "SA") %>% 
+  group_by(question, answer) %>% 
+  summarise(count = n()) %>% 
+  mutate(rate = count / sum(count)) %>% 
+  ggplot(aes(answer, rate, fill = count))+
+  geom_bar(stat = "identity")+
+  facet_wrap(~question)+
+  coord_flip()+
+  scale_fill_viridis_c()
+```
+
+### how to use
+
+- 「いいね！」，「拡散」に顕著な差（Twitterが異質）
+- それ以外の項目に関しては若干の特徴が出る感じ
+
+```{r}
+data %>% 
+  filter(qu_genre_code == 32,
+         question_type == "MA") %>% 
+  group_by(question, house_num) %>% 
+  summarise() %>% 
+  summarise(count_house = n()) %>% 
+  left_join(data, by = "question") %>% 
+  group_by(question, answer) %>% 
+  summarise(count = n(),
+            count_house = count_house[1]) %>% 
+  mutate(rate = count / count_house) %>% 
+  ggplot(aes(question, rate, fill = count))+
+  geom_bar(stat = "identity")+
+  scale_fill_viridis_c()+
+  facet_wrap(~answer)+
+  coord_flip()
+
+```
+
+
+## bb

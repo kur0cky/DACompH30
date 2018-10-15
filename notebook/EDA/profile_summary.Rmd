@@ -1,0 +1,40 @@
+---
+title: "profile"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(knitr)
+theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
+```
+
+```{r}
+prof_mst <- read_csv("data/processed/profilemaster.csv")
+prof_data <- read_csv("data/processed/profiledata.csv")
+data <- prof_data %>% 
+  left_join(prof_mst, by = c("qu_genre_code", "question_code", "answer_code"))
+```
+
+```{r}
+tmp <- data %>% 
+  select(-house_num, -answer_code) %>% 
+  group_by(qu_genre_code, question_code,
+           qu_genre, question, question_type,
+           answer) %>% 
+  summarise(count = n()) %>% 
+  mutate(rate = count / sum(count)) %>% 
+  nest() %>% 
+  arrange(qu_genre_code, question_code) 
+# %>% 
+#   mutate(data = map2(data, question,
+#                      ~ kable(.x, caption = .y)))
+```
+
