@@ -40,8 +40,10 @@ data <- prof_data %>%
 - profile_data
 - profile_master
 
-についての概観を行うものである．  
-本レポートの構成は以下のようになっている
+についての概観を行うものである．
+
+本節では，アンケートデータについての概要と構成について述べる．  
+次節では各アンケート分類ごとに，主要なアンケートに絞って集計・可視化を行う
 
 ## question genre{.tabset .tabset-fade .tabset-pills}
 
@@ -49,7 +51,7 @@ data <- prof_data %>%
 
 私見では，役に立つのは 1 ~ 11, 25, 32 ぐらい．それ以外は使いにくい
 
-```{r}
+```{r echo=FALSE}
 prof_mst %>% 
   group_by(qu_genre_code, qu_genre,
            question_code) %>% 
@@ -75,11 +77,9 @@ prof_mst %>%
 11. インターネット関連項目：アプリごとに，どのぐらいの頻度で利用するか(SNS，ゲーム，動画配信等)
 12. 通販関連：通販の利用頻度や購入メディア
 13. 商品・サービス関連：日々の購買についていろいろ
-14. 
-23. 
-25. クラスター分類：**ビデオリサーチが提供するナゾのクラスタ**．
-27. 
-32. SNS関連項目：SNS利用方法・頻度（Facebook, Twitter, Instagram）
+
+- クラスター分類：**ビデオリサーチが提供するナゾのクラスタ**．
+- SNS関連項目：SNS利用方法・頻度（Facebook, Twitter, Instagram）
 
 ### utilization (personal opinion)
 
@@ -92,7 +92,7 @@ prof_mst %>%
 このデータについての分析を，他のログデータと合わせて解析することが考えられる．
 - 16：謎のクラスタ．正直使ってみたい
 
-## question type{.tabset .tabset-fade .tabset-pills}
+## question type{.tabset}
 
 本アンケートには自由記述式がないが，単回答式と複数回答式が存在する．
 それぞれの注意点について簡単に述べる
@@ -170,10 +170,140 @@ data %>%
 ```
 
 
-## クラスター分類（VR区分）
+## クラスター分類（VR区分）{.tabset}
 
 ビデオリサーチにより提供される謎のクラスタ  
 なんと大々的にやっているらしい．[参考リンク](http://vrhitoseg.com/results/)  
-しかも自分の16個の質問に答えるだけで分類してくれるよ！！[参考リンク](http://vrhitoseg.com/)
+しかも自分の16個の質問に答えるだけで分類してくれるよ！！[参考リンク](http://vrhitoseg.com/)  
+既にクラスタリングした結果であるので，素直に受け入れて使うのがいいかもしれない
 
-質問と項目を眺める
+6つの観点でクラスタリングしている
+
+
+1. 情報×選択セグメント：本参照
+2. 表現嗜好セグメント：（[参考](https://www.videor.co.jp/vr-digest/pdf/vrd522_201211/vrd522_article2.pdf)）
+3. シニアセグメント：シニア時代の人生観（[参考](https://dentsu-ho.com/articles/4963)）
+4. イノベーター指標：新商品やこれから来るブームに対する感応度（[参考](https://www.jmrlsi.co.jp/knowledge/yougo/my02/my0219.html)）
+5. 将来観：招来観，ようわからん
+6. わかものパーソナリティ：若者の人生観・社会性（[参考](https://www.videor.co.jp/vr-digest/pdf/vrd552_20160708/vrd552_article1.pdf)）
+7. 調理性向クラスター：主婦の調理に対する態度（[参考](https://www.videor.co.jp/vr-digest/pdf/vrd531_201311/vrd531_article5.pdf)）
+
+### information selection
+
+![情報選択セグメント](https://assets.dentsu-ho.com/uploads/ckeditor/pictures/18628/content__2.jpg)
+
+```{r}
+data %>% 
+  filter(qu_genre_code == 25, 
+         question_code == 1) %>% 
+  group_by(answer) %>% 
+  summarise(count = n()) %>% 
+  mutate(rate = count / sum(count)) %>% 
+  ggplot(aes(answer, count, fill = count))+
+  geom_bar(stat = "identity")+
+  coord_flip()
+```
+
+### expression perference
+
+CMの感じ取り方？？
+
+- 感性・ストーリー：シリーズものやドラマ仕立てで、感性的で印象的な表現を重んじるタイプ
+- シンプル・実証：商品の良さを実験データや利用者の声で説明している表現方法を重んじるタイプ
+- タレント歓迎：好みのタレントが起用されていることを重んじるタイプ
+- 表現無頓着：表現に関して、特に際立った嗜好性を持たないタイプ
+- 表現嗜好無し：全ての表現形式に対して関心を示さないタイプ
+
+```{r}
+data %>% 
+  filter(qu_genre_code == 25, 
+         question_code == 2) %>% 
+  group_by(answer) %>% 
+  summarise(count = n()) %>% 
+  mutate(rate = count / sum(count)) %>% 
+  ggplot(aes(answer, count, fill = count))+
+  geom_bar(stat = "identity")+
+  coord_flip()
+```
+
+### Senior 
+![シニアセグメント](https://assets.dentsu-ho.com/uploads/ckeditor/pictures/24909/content_gendai-senior02_04.png)
+
+```{r}
+data %>% 
+  filter(qu_genre_code == 25, 
+         question_code == 3) %>% 
+  group_by(answer) %>% 
+  summarise(count = n()) %>% 
+  mutate(rate = count / sum(count)) %>% 
+  ggplot(aes(answer, count, fill = count))+
+  geom_bar(stat = "identity")+
+  coord_flip()
+```
+
+### Innovator
+
+![イノベーター理論の図](https://i1.wp.com/connect-material.com/wp-content/uploads/2018/02/innovator.jpg?w=670&ssl=1)  
+出展：https://i1.wp.com/connect-material.com/wp-content/uploads/2018/02/innovator.jpg?w=670&ssl=1
+
+```{r}
+data %>% 
+  filter(qu_genre_code == 25, 
+         question_code == 4) %>% 
+  group_by(answer) %>% 
+  summarise(count = n()) %>% 
+  mutate(rate = count / sum(count)) %>% 
+  ggplot(aes(answer, count, fill = count))+
+  geom_bar(stat = "identity")+
+  coord_flip()
+```
+
+### vision of the future 
+
+```{r}
+data %>% 
+  filter(qu_genre_code == 25, 
+         question_code == 5) %>% 
+  group_by(answer) %>% 
+  summarise(count = n()) %>% 
+  mutate(rate = count / sum(count)) %>% 
+  ggplot(aes(answer, count, fill = count))+
+  geom_bar(stat = "identity")+
+  coord_flip()
+```
+
+### Junior
+
+![わかものパーソナリティ](https://i.imgur.com/OVQOWB2.png)
+
+```{r}
+data %>% 
+  filter(qu_genre_code == 25, 
+         question_code == 6) %>% 
+  group_by(answer) %>% 
+  summarise(count = n()) %>% 
+  mutate(rate = count / sum(count)) %>% 
+  ggplot(aes(answer, count, fill = count))+
+  geom_bar(stat = "identity")+
+  coord_flip()
+```
+
+### Cooking
+
+- 良菜賢母派：和食がとても好きだけどそもそも素は使わないので手作りで。
+- 悩み多き消極派：和食が好きだけど面倒なので料理の素を利用。
+- 流行を追う食楽派：色んな和食を楽しむために料理の素を積極活用。
+- 高感度ヘルシー派：健康意識から和食は手作りで。 
+- 調理回避派：手間のかかる和食は素を使ってでも作らない。
+
+```{r}
+data %>% 
+  filter(qu_genre_code == 25, 
+         question_code == 7) %>% 
+  group_by(answer) %>% 
+  summarise(count = n()) %>% 
+  mutate(rate = count / sum(count)) %>% 
+  ggplot(aes(answer, count, fill = count))+
+  geom_bar(stat = "identity")+
+  coord_flip()
+```
