@@ -128,7 +128,7 @@ prof_mst %>%
 - Twitterは他に比べて1日数回以上利用する人が多い
 - Facebookは利用していてもたまにしか利用しない人が多い
 
-### Frequency of use
+### frequency of use
 
 ```{r}
 data %>% 
@@ -170,4 +170,10 @@ data %>%
 ```
 
 
-## bb
+## クラスター分類（VR区分）
+
+ビデオリサーチにより提供される謎のクラスタ  
+なんと大々的にやっているらしい．[参考リンク](http://vrhitoseg.com/results/)  
+しかも自分の16個の質問に答えるだけで分類してくれるよ！！[参考リンク](http://vrhitoseg.com/)
+
+質問と項目を眺める

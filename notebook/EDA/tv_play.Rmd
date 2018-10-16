@@ -40,11 +40,11 @@ theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
 
 ```{r db_connection, echo = FALSE}
 conn <- dbConnect(PostgreSQL(),
-                  host="133.31.57.120",
-                  port=5222, 
+                  host="",
+                  port=, 
                   dbname="video", 
-                  user="m1", 
-                  password="shi0hama")
+                  user="", 
+                  password="")
 ```
 
 ```{r get_data}
@@ -58,9 +58,6 @@ orgn <- conn %>%
   tbl(from = dbplyr::in_schema("processed", "tv_orgn_p_cv"))
 program <- conn %>% 
   tbl(from = dbplyr::in_schema("processed", "tv_program"))
-data <- play %>% 
-  head(1000) %>% 
-  collect()
 ```
 
 ## tv_play データ

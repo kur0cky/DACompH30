@@ -232,6 +232,59 @@ renderPlot(
 
 ### comment
 
+# VRクラスタ
+
+## Inputs {.sidebar}
+
+```{r}
+ selectInput("question25", label = h3("question"), 
+    choices = prof_mst %>% 
+         filter(qu_genre_code == 25) %>% 
+         .$question %>% 
+         unique() %>% 
+         c() %>%  sort() %>%  
+         as.list()
+    , 
+    selected = 1)
+
+```
+
+## left{data-width=600}
+
+### graph
+
+```{r}
+question25 <- reactive(input$question25)
+renderPlot(
+  data %>% 
+  filter(question == question25()) %>% 
+  mutate(n_house = length(unique(house_num))) %>% 
+  group_by(answer, house_num) %>% 
+  summarise(n = n(),
+            n_house = n_house[1]) %>% 
+  summarise(n = sum(n),
+            rate = n / n_house[1]) %>% 
+  arrange(desc(rate)) %>% 
+    ggplot(aes(answer, rate, fill=n))+
+    geom_bar(stat = "identity")+
+    coord_flip()+
+    theme(text = element_text(size=15))+
+    scale_fill_viridis_c()+
+    scale_y_continuous(limits=c(0,1))
+)
+```
+
+## right
+
+### graph2（使用目的ごとSNSの該当数）
+
+```{r}
+renderText(
+  {"hogehoge"}
+)
+```
+
+
 # SNS関連
 
 ## Inputs {.sidebar}
