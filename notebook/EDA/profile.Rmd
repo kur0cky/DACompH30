@@ -339,3 +339,23 @@ data %>%
   # facet_wrap(~question)
 ```
 
+## station_code
+
+```{r}
+mat <- data %>% 
+  filter(str_detect(question, pattern="テレビ局イメージ")) %>% 
+  group_by(question) %>% 
+  summarise(house_count = length(unique(house_num))) %>% 
+  left_join(data, by = "question") %>% 
+  group_by(question, answer) %>% 
+  summarise(rate = n() / house_count[1]) %>% 
+  ungroup() %>% 
+  mutate(question = str_sub(question, 10, -2)) %>% 
+  spread(question, rate)
+
+mat %>% 
+  as.data.frame() %>% 
+  column_to_rownames("answer") %>% 
+  prcomp()
+```
+
