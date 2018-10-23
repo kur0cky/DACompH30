@@ -1,0 +1,112 @@
+---
+title: "EDA about tv orgn"
+output:
+  html_document:
+    number_sections: true
+    fig_caption: true
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    fig_width: 7
+    fig_height: 4.5
+    theme: cosmo
+    highlight: tango
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+md_extensions: -ascii_identifiers
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warnings = FALSE)
+```
+
+```{r setup}
+library(tidyverse)
+library(lubridate)
+library(dbplyr)
+library(dbplot)
+library(DB)
+library(RPostgreSQL)
+
+theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
+
+conn <- dbConnect(PostgreSQL(),
+                  host = scan("connection.txt", what = character())[1],
+                  port = scan("connection.txt", what = character())[2], 
+                  dbname = scan("connection.txt", what = character())[3], 
+                  user = scan("connection.txt", what = character())[4], 
+                  password = scan("connection.txt", what = character())[5])
+
+orgn <- conn %>% 
+  tbl(from = dbplyr::in_schema("edit", "tv_orgn_program")) 
+tmp <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_orgn_p_cv")) 
+```
+
+
+# introduction
+
+テレビ接触の傾向をさぐる  
+
+**TV接触おさらい**
+タイムシフト or リアルタイムを問わず，再生された番組の放送局と放送日時のレコード．
+
+# between realtime and timeshift
+
+## count records{.tabset}
+
+### processed
+
+- 細切れに分けて接触した場合はレコードが増える
+- ぶっ通しで複数番組見た場合はレコードが一つになる
+- リアルタイムがタイムシフトの約2倍ある
+
+```{r}
+tmp %>% 
+  count(data_agg_type) %>% 
+  arrange(data_agg_type) %>% 
+  ggplot(aes(factor(data_agg_type), n))+
+  geom_bar(stat = "identity", colour = "blue", fill = "skyblue")+
+  geom_text(aes(label = n, y = n*0.9))+
+  labs(x = "リアルタイム, タイムシフト")
+```
+
+
+### edit
+
+- 番組との回数
+- ぶっ通しで複数番組見た場合が切り分けられている
+    - 当然，タイムシフトは番組ごとに予約して見ているはず
+    - よってリアルタイムの方が爆発的に増える（約1.5倍）
+
+```{r}
+orgn %>% 
+  count(data_agg_type) %>% 
+  arrange(data_agg_type) %>% 
+  ggplot(aes(factor(data_agg_type), n))+
+  geom_bar(stat = "identity", colour = "blue", fill = "skyblue")+
+  geom_text(aes(label = n, y = n*0.9))+
+  labs(x = "リアルタイム, タイムシフト")
+```
+
+
+## watch time
+
+どのぐらいの時間番組を見たか
+
+```{r}
+orgn %>% 
+  select(watch_time, data_agg_type)
+
+dbGetQuery(conn, "
+SELECT
+  EXTRACT(hour from watch_time ) as time
+FROM
+  edit.tv_orgn_program
+LIMIT 100
+")
+```
+
