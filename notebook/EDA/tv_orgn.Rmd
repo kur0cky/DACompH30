@@ -1,5 +1,5 @@
 ---
-title: "EDA about tv orgn"
+title: "EDA about orgn_program"
 output:
   html_document:
     number_sections: true
@@ -20,7 +20,8 @@ md_extensions: -ascii_identifiers
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE,
                       message = FALSE,
-                      warnings = FALSE)
+                      warnings = FALSE,
+                      cache = TRUE)
 ```
 
 ```{r setup}
@@ -30,6 +31,7 @@ library(dbplyr)
 library(dbplot)
 library(DB)
 library(RPostgreSQL)
+library(ggforce)
 
 theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
 
@@ -44,6 +46,10 @@ orgn <- conn %>%
   tbl(from = dbplyr::in_schema("edit", "tv_orgn_program")) 
 tmp <- conn %>% 
   tbl(from = dbplyr::in_schema("processed", "tv_orgn_p_cv")) 
+program <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_program")) 
+ban <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "bancluster_mst")) 
 ```
 
 
@@ -96,17 +102,87 @@ orgn %>%
 ## watch time
 
 どのぐらいの時間番組を見たか
+接触分(watch_time)ごとのレコード数をプロットした  
+orgn_programを使用
+
+- 指数分布に近い
+- 2380万レコードのうち，500万レコードが1分以内
+- チャンネルを目まぐるしく変えている感じ？
+- 60分, 30分, 15分, 10分, 5分のスパイクが目立つ
+- 番組を最初から最後まで見ているためだろうか？
 
 ```{r}
-orgn %>% 
-  select(watch_time, data_agg_type)
-
-dbGetQuery(conn, "
+watch_time <- dbGetQuery(conn, "
 SELECT
-  EXTRACT(hour from watch_time ) as time
+  COUNT (*),
+  EXTRACT(hour from watch_time ) * 60 +
+  EXTRACT(minute from watch_time)  as watch_time
 FROM
   edit.tv_orgn_program
-LIMIT 100
+GROUP BY
+  EXTRACT(hour from watch_time ) * 60 +
+  EXTRACT(minute from watch_time) 
 ")
+watch_time %>% 
+  arrange(watch_time) %>% 
+  ggplot(aes(watch_time, count))+
+  geom_bar(stat = "identity")+
+  facet_zoom(x = watch_time < 65)
+
+watch_time %>% 
+  arrange(watch_time) %>% 
+  filter(watch_time != 0) %>% 
+  ggplot(aes(watch_time, count))+
+  geom_bar(stat = "identity")+
+  facet_zoom(x = watch_time < 65)+
+  labs(title = "watch_time != 0")
+```
+
+
+## watch time（watch_time = program_time）{.tabset}
+
+
+### 世帯ごとの合計テレビ接触時間の分布
+
+- 10000時間ぐらいでピーク
+
+```{r}
+watch_time_per_house <- dbGetQuery(conn, "
+SELECT
+  house_num,
+  COUNT (*),
+  sum(
+    EXTRACT(hour from watch_time ) * 60 +
+    EXTRACT(minute from watch_time)
+  ) as watch_time
+FROM
+  edit.tv_orgn_program
+WHERE
+  EXTRACT(hour from watch_time ) * 60 +
+  EXTRACT(minute from watch_time) != 0
+GROUP BY
+  house_num
+") %>% 
+  arrange(house_num) %>% 
+  as_tibble()
+watch_time_per_house %>% 
+  ggplot(aes(watch_time))+
+  geom_histogram(bins = 50)+
+  facet_zoom(x = watch_time < 200000)+
+  labs(x = "テレビ接触時間（分）", y = "世帯数")
+```
+
+### 世帯ごとの平均テレビ接触時間
+
+- 15~20分ぐらいでピーク
+- 
+
+```{r}
+watch_time_per_house %>% 
+  as_tibble() %>% 
+  mutate(mean_watch_time = watch_time / count) %>% 
+  ggplot(aes(mean_watch_time))+
+  geom_histogram(bins=50)
+  
 ```
 
