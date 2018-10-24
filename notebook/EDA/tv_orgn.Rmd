@@ -29,7 +29,6 @@ library(tidyverse)
 library(lubridate)
 library(dbplyr)
 library(dbplot)
-library(DB)
 library(RPostgreSQL)
 library(ggforce)
 
@@ -58,13 +57,14 @@ ban <- conn %>%
 テレビ接触の傾向をさぐる  
 
 **TV接触おさらい**
-タイムシフト or リアルタイムを問わず，再生された番組の放送局と放送日時のレコード．
+タイムシフト or リアルタイムを問わず，再生された番組の放送局と放送日時のレコード．  
+さらに，なんの番組を見ていたかに対応するorgn_programを稗田さんに作成していただいた
 
-# between realtime and timeshift
 
-## count records{.tabset}
 
-### processed
+# count records{.tabset}
+
+## processed
 
 - 細切れに分けて接触した場合はレコードが増える
 - ぶっ通しで複数番組見た場合はレコードが一つになる
