@@ -146,21 +146,24 @@ orgn %>%
 ## count records per program
 
 ```{r barplot_records_per_program}
-orgn %>% 
+TOP5_ban1 <- orgn %>% 
   select(house_num, program_start_time, station_code, data_agg_type) %>% 
   left_join(program, by = c("program_start_time", "station_code")) %>% 
   count(ban_code1, program_code, program_name) %>% 
   ungroup() %>% 
   group_by(ban_code1) %>% 
   arrange(desc(n)) %>% 
-  collect() %>% 
+  collect() 
+TOP5_ban1 %>% 
   slice(1:5) %>% 
   ungroup() %>% 
-  left_join(ban1, by = "ban_code1") %>% 
+  left_join(collect(ban1), by = "ban_code1") %>% 
+  mutate(program_name = str_remove_all(program_name, pattern = " ")) %>% 
   ggplot(aes(program_name, n))+
-  geom_bar(stat = "identity")+
+  geom_bar(stat = "identity", fill = "gray80", colour = "blue")+
+  geom_text(aes(label = n, y = n*1.2))+
   coord_flip()+
-  facet_wrap(~ban_code1_naiyou, scale="free")
+  facet_wrap(~ban_code1_naiyou, scale="free_y")
 ```
 
 
