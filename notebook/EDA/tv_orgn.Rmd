@@ -88,6 +88,7 @@ tmp %>%
   labs(x = "リアルタイム, タイムシフト")
 ```
 
+
 ## edit.orgn_program_2
 
 - 番組との回数
