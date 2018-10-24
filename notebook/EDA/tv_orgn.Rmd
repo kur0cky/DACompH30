@@ -44,7 +44,7 @@ conn <- dbConnect(PostgreSQL(),
                   password = scan("connection.txt", what = character())[5])
 
 orgn <- conn %>% 
-  tbl(from = dbplyr::in_schema("edit", "tv_orgn_program")) 
+  tbl(from = dbplyr::in_schema("edit", "tv_orgn_program_2")) 
 tmp <- conn %>% 
   tbl(from = dbplyr::in_schema("processed", "tv_orgn_p_cv")) 
 program <- conn %>% 
@@ -52,8 +52,7 @@ program <- conn %>%
 ban <- conn %>% 
   tbl(from = dbplyr::in_schema("processed", "bancluster_mst")) 
 ban1 <- conn %>% 
-  tbl(from = dbplyr::in_schema("sub_mst", "ban_code1_mst")) %>% 
-  collect()
+  tbl(from = dbplyr::in_schema("sub_mst", "ban_code1_mst")) 
 ```
 
 
@@ -68,12 +67,12 @@ ban1 <- conn %>%
 クラスタ（VR区分）との繋がりも探っていけたら良い
 
 **注意点**  
-orgn_programでは番組を跨いだ視聴が分割されるので，注意が必要
-
+processed.tv_orgn_p_cvが接触した放送部分のレコードであるのに対し  
+edit.orgn_programでは番組を跨いだ視聴が分割されるので，注意が必要
 
 # count records{.tabset}
 
-## processed.orgn
+## processed.tv_orgn_p_cv
 
 - 細切れに分けて接触した場合はレコードが増える
 - ぶっ通しで複数番組見た場合はレコードが一つになる
@@ -90,12 +89,13 @@ tmp %>%
 ```
 
 
-## edit.orgn_program
+## edit.orgn_program_2
 
 - 番組との回数
 - ぶっ通しで複数番組見た場合が切り分けられている
     - 当然，タイムシフトは番組ごとに予約して見ているはず
     - よってリアルタイムの方が爆発的に増える（約1.5倍）
+    - タイムシフト視聴の方はほとんど変わらない（6万件増える）
 
 ```{r count_records_edit.orgn_program}
 orgn %>% 
@@ -116,6 +116,7 @@ orgn %>%
 orgn %>% 
   left_join(program, by = c("program_code", "program_start_time")) %>% 
   count(ban_code1, data_agg_type) %>% 
+  ungroup() %>% 
   left_join(ban1, by = "ban_code1") %>% 
   ggplot(aes(ban_code1_naiyou, n))+
   geom_bar(stat = "identity", colour = "blue", fill = "skyblue")+
@@ -123,7 +124,7 @@ orgn %>%
   facet_wrap(~data_agg_type, scale = "free")
 ```
 
-続いてタイムシフトの占める比率を見てみる
+続いて全体に占めるタイムシフトの比率を見てみる
 
 - ドラマ，映画，アニメはタイムシフトで見る傾向が顕著
 - 次点で音楽，娯楽番組
@@ -138,7 +139,7 @@ orgn %>%
   mutate(rate = n / sum(n, na.rm=TRUE)) %>% 
   filter(data_agg_type == 9) %>% 
   ggplot(aes(ban_code1_naiyou, rate))+
-  geom_bar(stat = "identity", colour = "gray25")+
+  geom_bar(stat = "identity", colour = "blue", fill = "skyblue")+
   coord_flip()
 ```
 
