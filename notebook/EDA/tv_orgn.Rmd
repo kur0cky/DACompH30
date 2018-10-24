@@ -145,16 +145,16 @@ orgn %>%
 
 ## count records per program
 
-```{r}
+```{r barplot_records_per_program}
 orgn %>% 
   select(house_num, program_start_time, station_code, data_agg_type) %>% 
   left_join(program, by = c("program_start_time", "station_code")) %>% 
   count(ban_code1, program_code, program_name) %>% 
   ungroup() %>% 
-  collect() %>% 
   group_by(ban_code1) %>% 
   arrange(desc(n)) %>% 
-  slice(1:10) %>% 
+  collect() %>% 
+  slice(1:5) %>% 
   ungroup() %>% 
   left_join(ban1, by = "ban_code1") %>% 
   ggplot(aes(program_name, n))+
