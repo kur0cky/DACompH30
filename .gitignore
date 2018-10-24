@@ -3,6 +3,9 @@
 *.png
 *.rds
 *.csv
+*.RData
+*.rdb
+*.rdx
 connection.txt
 .ga-token.rds
 notebook/EDA/connection.txt

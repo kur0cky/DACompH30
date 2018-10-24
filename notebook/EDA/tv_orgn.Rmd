@@ -24,7 +24,7 @@ knitr::opts_chunk$set(echo = TRUE,
                       cache = TRUE)
 ```
 
-```{r setup}
+```{r import, cache=FALSE}
 library(tidyverse)
 library(lubridate)
 library(dbplyr)
@@ -33,7 +33,9 @@ library(RPostgreSQL)
 library(ggforce)
 
 theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
+```
 
+```{r connect, cache=FALSE}
 conn <- dbConnect(PostgreSQL(),
                   host = scan("connection.txt", what = character())[1],
                   port = scan("connection.txt", what = character())[2], 
@@ -49,6 +51,9 @@ program <- conn %>%
   tbl(from = dbplyr::in_schema("processed", "tv_program")) 
 ban <- conn %>% 
   tbl(from = dbplyr::in_schema("processed", "bancluster_mst")) 
+ban1 <- conn %>% 
+  tbl(from = dbplyr::in_schema("sub_mst", "ban_code1_mst")) %>% 
+  collect()
 ```
 
 
@@ -60,17 +65,21 @@ ban <- conn %>%
 タイムシフト or リアルタイムを問わず，再生された番組の放送局と放送日時のレコード．  
 さらに，なんの番組を見ていたかに対応するorgn_programを稗田さんに作成していただいた
 
+クラスタ（VR区分）との繋がりも探っていけたら良い
+
+**注意点**  
+orgn_programでは番組を跨いだ視聴が分割されるので，注意が必要
 
 
 # count records{.tabset}
 
-## processed
+## processed.orgn
 
 - 細切れに分けて接触した場合はレコードが増える
 - ぶっ通しで複数番組見た場合はレコードが一つになる
 - リアルタイムがタイムシフトの約2倍ある
 
-```{r}
+```{r count_records_processed.orgn}
 tmp %>% 
   count(data_agg_type) %>% 
   arrange(data_agg_type) %>% 
@@ -81,14 +90,14 @@ tmp %>%
 ```
 
 
-### edit
+## edit.orgn_program
 
 - 番組との回数
 - ぶっ通しで複数番組見た場合が切り分けられている
     - 当然，タイムシフトは番組ごとに予約して見ているはず
     - よってリアルタイムの方が爆発的に増える（約1.5倍）
 
-```{r}
+```{r count_records_edit.orgn_program}
 orgn %>% 
   count(data_agg_type) %>% 
   arrange(data_agg_type) %>% 
@@ -99,7 +108,65 @@ orgn %>%
 ```
 
 
-## watch time
+## per ban_code1
+
+- ドラマは録画して見る傾向が強い，などの傾向がありそう
+
+```{r barplot_records_per_ban_code1}
+orgn %>% 
+  left_join(program, by = c("program_code", "program_start_time")) %>% 
+  count(ban_code1, data_agg_type) %>% 
+  left_join(ban1, by = "ban_code1") %>% 
+  ggplot(aes(ban_code1_naiyou, n))+
+  geom_bar(stat = "identity", colour = "blue", fill = "skyblue")+
+  coord_flip()+
+  facet_wrap(~data_agg_type, scale = "free")
+```
+
+続いてタイムシフトの占める比率を見てみる
+
+- ドラマ，映画，アニメはタイムシフトで見る傾向が顕著
+- 次点で音楽，娯楽番組
+- 逆に報道，教育・教養・実用・スポーツはリアルタイムで見る傾向
+
+```{r cum_barplot_records_per_ban_code1}
+orgn %>% 
+  left_join(program, by = c("program_code", "program_start_time")) %>% 
+  count(ban_code1, data_agg_type) %>% 
+  left_join(ban1, by = "ban_code1") %>% 
+  group_by(ban_code1_naiyou) %>% 
+  mutate(rate = n / sum(n, na.rm=TRUE)) %>% 
+  filter(data_agg_type == 9) %>% 
+  ggplot(aes(ban_code1_naiyou, rate))+
+  geom_bar(stat = "identity", colour = "gray25")+
+  coord_flip()
+```
+
+## count records per program
+
+```{r}
+orgn %>% 
+  select(house_num, program_start_time, station_code, data_agg_type) %>% 
+  left_join(program, by = c("program_start_time", "station_code")) %>% 
+  count(ban_code1, program_code, program_name) %>% 
+  ungroup() %>% 
+  collect() %>% 
+  group_by(ban_code1) %>% 
+  arrange(desc(n)) %>% 
+  slice(1:10) %>% 
+  ungroup() %>% 
+  left_join(ban1, by = "ban_code1") %>% 
+  ggplot(aes(program_name, n))+
+  geom_bar(stat = "identity")+
+  coord_flip()+
+  facet_wrap(~ban_code1_naiyou, scale="free")
+```
+
+
+
+
+
+# watch time
 
 どのぐらいの時間番組を見たか
 接触分(watch_time)ごとのレコード数をプロットした  
@@ -139,10 +206,10 @@ watch_time %>%
 ```
 
 
-## watch time（watch_time = program_time）{.tabset}
+# watch time（watch_time = program_time）{.tabset}
 
 
-### 世帯ごとの合計テレビ接触時間の分布
+## sum watch_time per house
 
 - 10000時間ぐらいでピーク
 
@@ -172,7 +239,7 @@ watch_time_per_house %>%
   labs(x = "テレビ接触時間（分）", y = "世帯数")
 ```
 
-### 世帯ごとの平均テレビ接触時間
+## mean watch_time per house
 
 - 15~20分ぐらいでピーク
 - 
@@ -181,8 +248,9 @@ watch_time_per_house %>%
 watch_time_per_house %>% 
   as_tibble() %>% 
   mutate(mean_watch_time = watch_time / count) %>% 
-  ggplot(aes(mean_watch_time))+
-  geom_histogram(bins=50)
+  ggplot(aes(mean_watch_time, ..density..))+
+  geom_histogram(bins=50, fill="skyblue")+
+  geom_density()
   
 ```
 
