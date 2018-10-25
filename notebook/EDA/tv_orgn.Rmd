@@ -8,7 +8,6 @@ output:
     toc_float: true
     toc_depth: 2
     fig_width: 7
-    fig_height: 4.5
     theme: cosmo
     highlight: tango
     code_folding: hide
@@ -158,17 +157,11 @@ TOP5_ban1 %>%
   slice(1:5) %>% 
   ungroup() %>% 
   left_join(collect(ban1), by = "ban_code1") %>% 
+  arrange(ban_code1_naiyou) %>% 
   mutate(program_name = str_remove_all(program_name, pattern = " ")) %>% 
-  ggplot(aes(program_name, n))+
-  geom_bar(stat = "identity", fill = "gray80", colour = "blue")+
-  geom_text(aes(label = n, y = n*1.2))+
-  coord_flip()+
-  facet_wrap(~ban_code1_naiyou, scale="free_y")
+  select(ban_code1_naiyou, program_name, n) %>% 
+  datatable()
 ```
-
-
-
-
 
 # watch time
 
@@ -182,35 +175,14 @@ orgn_programを使用
 - 60分, 30分, 15分, 10分, 5分のスパイクが目立つ
 - 番組を最初から最後まで見ているためだろうか？
 
-```{r}
-watch_time <- dbGetQuery(conn, "
-SELECT
-  COUNT (*),
-  EXTRACT(hour from watch_time ) * 60 +
-  EXTRACT(minute from watch_time)  as watch_time
-FROM
-  edit.tv_orgn_program
-GROUP BY
-  EXTRACT(hour from watch_time ) * 60 +
-  EXTRACT(minute from watch_time) 
-")
-watch_time %>% 
-  arrange(watch_time) %>% 
-  ggplot(aes(watch_time, count))+
-  geom_bar(stat = "identity")+
-  facet_zoom(x = watch_time < 65)
 
-watch_time %>% 
-  arrange(watch_time) %>% 
-  filter(watch_time != 0) %>% 
-  ggplot(aes(watch_time, count))+
-  geom_bar(stat = "identity")+
-  facet_zoom(x = watch_time < 65)+
-  labs(title = "watch_time != 0")
+
+## watch time（watch_time = program_time）{.tabset}
+
+```{r histogram_watch_time}
+orgn %>% 
+  dbplot_bar(watch_time)
 ```
-
-
-# watch time（watch_time = program_time）{.tabset}
 
 
 ## sum watch_time per house
