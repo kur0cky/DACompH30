@@ -19,7 +19,7 @@ md_extensions: -ascii_identifiers
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE,
                       message = FALSE,
-                      warnings = FALSE,
+                      warning = FALSE,
                       cache = TRUE)
 ```
 
@@ -30,6 +30,7 @@ library(dbplyr)
 library(dbplot)
 library(RPostgreSQL)
 library(ggforce)
+library(DT)
 
 theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
 ```
@@ -52,6 +53,12 @@ ban <- conn %>%
   tbl(from = dbplyr::in_schema("processed", "bancluster_mst")) 
 ban1 <- conn %>% 
   tbl(from = dbplyr::in_schema("sub_mst", "ban_code1_mst")) 
+prof_data <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "profiledata"))
+prof_mst <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "profilemaster"))
+prof <- prof_data %>% 
+  left_join(prof_mst, by = c("qu_genre_code", "question_code", "answer_code"))
 ```
 
 
@@ -145,7 +152,7 @@ orgn %>%
 ## count records per program
 
 ```{r barplot_records_per_program}
-TOP5_ban1 <- orgn %>% 
+top5 <- orgn %>% 
   select(house_num, program_start_time, station_code, data_agg_type) %>% 
   left_join(program, by = c("program_start_time", "station_code")) %>% 
   count(ban_code1, program_code, program_name) %>% 
@@ -153,7 +160,7 @@ TOP5_ban1 <- orgn %>%
   group_by(ban_code1) %>% 
   arrange(desc(n)) %>% 
   collect() 
-TOP5_ban1 %>% 
+top5 %>% 
   slice(1:5) %>% 
   ungroup() %>% 
   left_join(collect(ban1), by = "ban_code1") %>% 
@@ -163,70 +170,300 @@ TOP5_ban1 %>%
   datatable()
 ```
 
-# watch time
+# watch time {.tabset}
 
 どのぐらいの時間番組を見たか
 接触分(watch_time)ごとのレコード数をプロットした  
 orgn_programを使用
 
 - 指数分布に近い
-- 2380万レコードのうち，500万レコードが1分以内
 - チャンネルを目まぐるしく変えている感じ？
-- 60分, 30分, 15分, 10分, 5分のスパイクが目立つ
-- 番組を最初から最後まで見ているためだろうか？
 
 
 
-## watch time（watch_time = program_time）{.tabset}
+
+## watch_time distribution
+
+- 指数分布っぽい？
+- 2380万レコードのうち，500万レコードが1分以内
 
 ```{r histogram_watch_time}
 orgn %>% 
-  dbplot_bar(watch_time)
+  dbplot_bar(watch_time)+
+  facet_zoom(x = x < 70)
 ```
 
 
-## sum watch_time per house
+## non zero watch_time distribution
 
-- 10000時間ぐらいでピーク
+- 指数分布っぽい
+- 60分, 30分, 15分, 10分, 5分のスパイクが目立つ
+- 番組を最初から最後まで見ているためだろうか？
 
-```{r}
-watch_time_per_house <- dbGetQuery(conn, "
-SELECT
-  house_num,
-  COUNT (*),
-  sum(
-    EXTRACT(hour from watch_time ) * 60 +
-    EXTRACT(minute from watch_time)
-  ) as watch_time
-FROM
-  edit.tv_orgn_program
-WHERE
-  EXTRACT(hour from watch_time ) * 60 +
-  EXTRACT(minute from watch_time) != 0
-GROUP BY
-  house_num
-") %>% 
-  arrange(house_num) %>% 
-  as_tibble()
-watch_time_per_house %>% 
-  ggplot(aes(watch_time))+
-  geom_histogram(bins = 50)+
-  facet_zoom(x = watch_time < 200000)+
-  labs(x = "テレビ接触時間（分）", y = "世帯数")
+```{r barplot_nonzero}
+orgn %>% 
+  filter(watch_time != 0) %>% 
+  dbplot_bar(watch_time)+
+  facet_zoom(x = x < 70)
 ```
 
-## mean watch_time per house
+## watch_time ratio
 
-- 15~20分ぐらいでピーク
-- 
+番組時間のうち，一回の接触がどのぐらいの割合かを見る
 
-```{r}
-watch_time_per_house %>% 
-  as_tibble() %>% 
-  mutate(mean_watch_time = watch_time / count) %>% 
-  ggplot(aes(mean_watch_time, ..density..))+
-  geom_histogram(bins=50, fill="skyblue")+
-  geom_density()
+- リアルタイムは直感に合う
+    - 番組を全部見るのが割とあって
+    - 一瞬で他に変えるのが割とある
+- タイムシフトが直感に合わない
+    - CMを飛ばすため，割合1が少ないのは頷ける
+    - 割合0がめちゃくちゃ多い理由がわからない
+    - わざわざタイムシフト視聴してるのに
+    - **CMを飛ばしたり巻き戻したりすると，別々のレコードとして記録される？？？**
+
+```{r watch_time_rate}
+orgn %>% 
+  mutate(watch_time_rate = watch_time / program_time) %>% 
+  filter(data_agg_type == 1) %>% 
+  dbplot_histogram(watch_time_rate)+
+  labs(title = "リアルタイム")
+
+orgn %>% 
+  mutate(watch_time_rate = watch_time / program_time) %>% 
+  filter(data_agg_type == 9) %>% 
+  dbplot_histogram(watch_time_rate)+
+  labs(title = "タイムシフト")
   
+```
+
+## raster plot watch_time and program_time
+
+```{r raster_watch_program}
+orgn %>% 
+  mutate(watch_time_rate = watch_time / program_time) %>% 
+  dbplot_raster(program_time, watch_time, resolution = 10)+
+  labs("all records")
+```
+
+```{r raster_nzero_watch_program}
+orgn %>% 
+  filter(watch_time != 0) %>% 
+  mutate(watch_time_rate = watch_time / program_time) %>% 
+  dbplot_raster(program_time, watch_time_rate, resolution = 10)+
+  labs(title = "non zero watch_time")
+```
+
+# per house_num {.tabset}
+
+## sum watch_time
+
+- 右に裾の広い分布
+- 少数の世帯がかなりテレビを見る
+
+```{r barplot sum_watch_time}
+orgn %>% 
+  group_by(house_num) %>% 
+  summarise(sum_watch_time = sum(watch_time)) %>% 
+  arrange(desc(sum_watch_time)) %>% 
+  collect() %>% 
+  mutate(rank = 1:n()) %>% 
+  ggplot(aes(rank, sum_watch_time))+
+  geom_bar(stat = "identity")
+```
+
+```{r histogram sum_watch_time}
+orgn %>% 
+  group_by(house_num) %>% 
+  summarise(sum_watch_time = sum(watch_time)) %>% 
+  arrange(desc(sum_watch_time)) %>% 
+  collect() %>% 
+  ggplot(aes(sum_watch_time, ..density..))+
+  geom_histogram( fill = "skyblue")+
+  geom_density()
+```
+
+## log sum watch_time
+
+- ヒストグラムを見ると，明らかな異常値がある
+- 全くテレビをみない世帯
+
+```{r barplot log_sum_watch_time}
+orgn %>% 
+  group_by(house_num) %>% 
+  summarise(log_sum_watch_time = log(sum(watch_time)+1)) %>% 
+  arrange(desc(log_sum_watch_time)) %>% 
+  collect() %>% 
+  mutate(rank = 1:n()) %>% 
+  ggplot(aes(rank, log_sum_watch_time))+
+  geom_bar(stat = "identity")
+```
+
+```{r histogram log_sum_watch_time}
+orgn %>% 
+  group_by(house_num) %>% 
+  summarise(log_sum_watch_time = log(sum(watch_time)+1)) %>% 
+  collect() %>% 
+  ggplot(aes(log_sum_watch_time, ..density..))+
+  geom_histogram(fill = "skyblue")+
+  geom_density()
+```
+
+## watch_time ratio
+
+- オレンジが中央値で水色が平均値（世帯ごと）
+- 基本的に **平均 > 中央値**であることから，どの世帯も基本的に**watch_time rateは右に裾が広い**
+
+```{r mean watch_time ratio per house_num}
+orgn %>% 
+  group_by(house_num, data_agg_type) %>% 
+  summarise(mean_watch_time = mean(watch_time / program_time),
+            median_watch_time = median(watch_time / program_time)) %>% 
+  ggplot(aes(mean_watch_time, ..density..))+
+  geom_histogram(fill = "skyblue")+
+  geom_histogram(aes(median_watch_time), fill = "orange")+
+  geom_density()+
+  geom_density(aes(median_watch_time))+
+  facet_wrap(~data_agg_type)
+```
+
+
+# per ban_code1{.tabset}
+
+## program_time distribution
+
+programからとってきた
+
+```{r program_time_distribution_time}
+program %>% 
+  left_join(ban1, by = "ban_code1") %>% 
+  collect() %>% 
+  select(ban_code1_naiyou, program_time) %>% 
+  ggplot(aes(program_time, ..density..))+
+  geom_histogram(fill = "skyblue", colour = "blue")+
+  facet_wrap(~ban_code1_naiyou)
+```
+
+## watch_time summarise
+
+番組大分類ごとの平均watch_time  
+中央値を点で併記した
+
+- アニメ, 報道は偏りがあまりない．
+- 右に裾が長くない
+- つまりチャンネルチェンジされる確率が低いといえる
+
+```{r realtime watchtime mean_median}
+orgn %>% 
+  filter(data_agg_type == 1) %>% 
+  select(program_code, program_start_time, watch_time) %>% 
+  left_join(program, by = c("program_code", "program_start_time")) %>% 
+  left_join(ban1, by = "ban_code1") %>% 
+  select(ban_code1_naiyou, watch_time) %>% 
+  group_by(ban_code1_naiyou) %>% 
+  summarise(mean = mean(watch_time),
+            median = median(watch_time)) %>% 
+  ggplot(aes(x = mean, y = median))+
+  geom_text(aes(label = ban_code1_naiyou), family = "HiraKakuPro-W3")
+```
+
+
+```{r timeshift watchtime mean_median}
+orgn %>% 
+  filter(data_agg_type == 9) %>% 
+  select(program_code, program_start_time, watch_time) %>% 
+  left_join(program, by = c("program_code", "program_start_time")) %>% 
+  left_join(ban1, by = "ban_code1") %>% 
+  select(ban_code1_naiyou, watch_time) %>% 
+  group_by(ban_code1_naiyou) %>% 
+  summarise(mean = mean(watch_time),
+            median = median(watch_time)) %>% 
+  ggplot(aes(x = mean, y = median))+
+  geom_text(aes(label = ban_code1_naiyou), family = "HiraKakuPro-W3")
+```
+
+## watch_time_rate
+
+mean watch_time_rateを棒グラフで  
+medianを点で
+
+```{r  realtime watch_time rate per bancode}
+orgn %>% 
+  filter(data_agg_type == 1) %>% 
+  select(program_code, program_start_time, watch_time) %>% 
+  left_join(program, by = c("program_code", "program_start_time")) %>% 
+  left_join(ban1, by = "ban_code1") %>% 
+  select(ban_code1_naiyou, watch_time, program_time) %>% 
+  mutate(rate = watch_time / program_time) %>% 
+  group_by(ban_code1_naiyou) %>% 
+  summarise(mean_rate = mean(rate),
+            median_rate =median(rate)) %>% 
+  ggplot(aes(ban_code1_naiyou, mean_rate))+
+  geom_bar(stat = "identity", fill = "gray50")+
+  geom_point(aes(y = median_rate))+
+  coord_flip()
+```
+
+```{r  timeshift watch_time rate per bancode}
+orgn %>% 
+  filter(data_agg_type == 9) %>% 
+  select(program_code, program_start_time, watch_time) %>% 
+  left_join(program, by = c("program_code", "program_start_time")) %>% 
+  left_join(ban1, by = "ban_code1") %>% 
+  select(ban_code1_naiyou, watch_time, program_time) %>% 
+  mutate(rate = watch_time / program_time) %>% 
+  group_by(ban_code1_naiyou) %>% 
+  summarise(mean_rate = mean(rate),
+            median_rate =median(rate)) %>% 
+  ggplot(aes(ban_code1_naiyou, mean_rate))+
+  geom_bar(stat = "identity", fill = "gray50")+
+  geom_point(aes(y = median_rate))+
+  coord_flip()
+```
+
+# per innovator{.tabset}
+
+```{r innov}
+innov <- prof %>% 
+  filter(qu_genre_code == 25,
+         question_code == 4) %>% 
+  select(house_num, answer_code, answer)
+```
+
+## sum watch_time
+
+```{r innov_watch_time}
+orgn %>% 
+  select(house_num, program_code, program_start_time, data_agg_type, watch_time) %>% 
+  left_join(innov, by = "house_num") %>% 
+  left_join(program, by = c("program_code", "program_start_time")) %>% 
+  left_join(ban1, by = "ban_code1") %>% 
+  group_by(answer, ban_code1_naiyou, data_agg_type) %>% 
+  summarise(watch_time = sum(watch_time)) %>% 
+  collect() %>% 
+  ungroup() %>% 
+  mutate(answer = str_remove_all(answer, pattern = " ")) %>% 
+  ggplot(aes(ban_code1_naiyou, watch_time))+
+  geom_bar(stat = "identity")+
+  coord_flip()+
+  facet_grid(data_agg_type~answer, scale = "free")
+```
+
+## mean watch_ratio
+
+```{ mean_watch_ratioaa}
+orgn %>% 
+  select(house_num, program_code, program_start_time, data_agg_type, watch_time) %>% 
+  left_join(innov, by = "house_num") %>% 
+  left_join(program, by = c("program_code", "program_start_time")) %>% 
+  left_join(ban1, by = "ban_code1") %>% 
+  mutate(rate = watch_time / program_time) %>% 
+  group_by(answer, ban_code1_naiyou, data_agg_type) %>% 
+  summarise(rate = mean(rate)) %>% 
+  collect() %>% 
+  ungroup() %>% 
+  mutate(answer = str_remove_all(answer, pattern = " ")) %>% 
+  ggplot(aes(ban_code1_naiyou, rate))+
+  geom_bar(stat = "identity")+
+  coord_flip()+
+  facet_grid(data_agg_type~answer, scale = "free")
 ```
 
