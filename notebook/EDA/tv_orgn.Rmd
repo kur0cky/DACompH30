@@ -59,6 +59,7 @@ prof_mst <- conn %>%
   tbl(from = dbplyr::in_schema("processed", "profilemaster"))
 prof <- prof_data %>% 
   left_join(prof_mst, by = c("qu_genre_code", "question_code", "answer_code"))
+
 ```
 
 
