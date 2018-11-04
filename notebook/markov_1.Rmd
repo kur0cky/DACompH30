@@ -1,0 +1,137 @@
+---
+title: "Markov_1"
+author: "Yutaka Kuroki"
+date: "2018/10/26"
+output:
+  html_document:
+    number_sections: true
+    fig_caption: true
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    fig_width: 7
+    theme: cosmo
+    highlight: tango
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+md_extensions: -ascii_identifiers
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE,
+                      cache = TRUE)
+```
+
+```{r import, cache=FALSE}
+library(tidyverse)
+library(lubridate)
+library(dbplyr)
+library(dbplot)
+library(RPostgreSQL)
+library(ggforce)
+library(DT)
+
+theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
+```
+
+```{r connect, cache=FALSE}
+conn <- dbConnect(PostgreSQL(),
+                  host = scan("connection.txt", what = character())[1],
+                  port = scan("connection.txt", what = character())[2], 
+                  dbname = scan("connection.txt", what = character())[3], 
+                  user = scan("connection.txt", what = character())[4], 
+                  password = scan("connection.txt", what = character())[5])
+
+# ログ
+orgn <- conn %>% 
+  tbl(from = dbplyr::in_schema("edit", "tv_orgn_program_2")) 
+tmp <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_orgn_p_cv")) 
+play <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_play_p_cv"))
+web <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "t_weblog"))
+# CM
+jiten <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "jiten_data"))
+brand <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "m_cm_tv_brand"))
+adv <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "m_cm_tv_advertiser"))
+# その他マスタ
+program <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_program")) 
+ban <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "bancluster_mst")) 
+ban1 <- conn %>% 
+  tbl(from = dbplyr::in_schema("sub_mst", "ban_code1_mst")) 
+sta <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "sta_mst"))
+sample <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_sample_p_cv"))
+job <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "job_mst"))
+# アンケート
+prof_data <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "profiledata"))
+prof_mst <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "profilemaster"))
+prof <- prof_data %>% 
+  left_join(prof_mst, by = c("qu_genre_code", "question_code", "answer_code"))
+```
+
+
+```{r}
+dat <- orgn %>% 
+  filter(data_agg_type == 1) %>% 
+  group_by(program_start_time, station_code) %>% 
+  summarise(program_time = sum(program_time),
+            watch_time = sum(watch_time)) %>% 
+  collect() %>% 
+  ungroup()
+
+rate <- dat %>% 
+  mutate(year = year(program_start_time),
+         month = month(program_start_time),
+         date = make_date(year, month)) %>% 
+  group_by(date, station_code) %>% 
+  summarise(watch_time = sum(watch_time)) %>% 
+  mutate(rate = watch_time / sum(watch_time)) %>% 
+  drop_na() %>% 
+  ungroup()
+
+```
+
+```{r}
+rate %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(date, rate, colour = station_jp, group = station_jp))+
+  geom_line()+
+  scale_colour_viridis_d()
+```
+
+
+```{r}
+library(lpSolve)
+f.obj <- c(rep(1,13 * 7*7), rep(1, 13 * 7*7))
+f.con <- matrix(c(rep(0, 13 * 7*7), rate$rate[1:7],rep(0, 12*7),
+                  rep(0, 7*7 * 13), rep(1, 7*7*13),
+                  ))
+
+f.dir <- rep("=", 7*7*13*3 + 7*13)
+
+f.fhs <- c(rate$rate,
+           rep(1, 7*7 * 13),
+           rep(0, 7*7 * 13),
+           rep(0, 7*7 * 13))
+```
+
+
+```{r}
+cbind(matrix(rep(c(1, rep(0,49)), 13)[1:(7*7*13)], ncol=7*7),
+      matrix(rep(c(1, rep(0,49)), 13)[1:(7*7*13)], ncol=7*7))
+```
+
