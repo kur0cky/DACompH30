@@ -11,6 +11,7 @@ library(dbplot)
 library(RPostgreSQL)
 library(ggforce)
 library(DT)
+library(NMF)
 
 # 作図オプション
 theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
@@ -172,3 +173,6 @@ basis %>%
   head(20)
 
 coef()
+
+res3 <- read_rds("data/result_nmf_3.rds")
+res5 <- read_rds("data/result_nmf_5.rds")
