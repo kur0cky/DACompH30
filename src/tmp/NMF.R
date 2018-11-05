@@ -125,7 +125,7 @@ mat <- tf_idf %>%
 mat <- mat[which(apply(mat,1,sum)!=0), which(apply(mat,2,sum)!=0)]
 
 library(NMF)
-res <- nmf(mat, 3)
+res_ <- nmf(mat, 3, objective = "KL")
 
 fitted(res) %>% dim
 

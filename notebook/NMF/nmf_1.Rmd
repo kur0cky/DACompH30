@@ -1,0 +1,119 @@
+---
+title: "nmf_1"
+author: "Yutaka Kuroki"
+date: "2018/11/5"
+output:
+  html_document:
+    number_sections: true
+    fig_caption: true
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    fig_width: 7
+    theme: cosmo
+    highlight: tango
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+md_extensions: -ascii_identifiers
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE,
+                      cache = TRUE)
+```
+
+```{r import, cache=FALSE}
+library(tidyverse)
+library(lubridate)
+library(dbplyr)
+library(dbplot)
+library(RPostgreSQL)
+library(ggforce)
+library(DT)
+
+theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
+```
+
+```{r connect, cache=FALSE}
+conn <- dbConnect(PostgreSQL(),
+                  host = scan("connection.txt", what = character())[1],
+                  port = scan("connection.txt", what = character())[2], 
+                  dbname = scan("connection.txt", what = character())[3], 
+                  user = scan("connection.txt", what = character())[4], 
+                  password = scan("connection.txt", what = character())[5])
+
+orgn <- conn %>% 
+  tbl(from = dbplyr::in_schema("edit", "tv_orgn_program_2")) 
+tmp <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_orgn_p_cv")) 
+program <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_program")) 
+ban <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "bancluster_mst")) 
+ban1 <- conn %>% 
+  tbl(from = dbplyr::in_schema("sub_mst", "ban_code1_mst")) 
+prof_data <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "profiledata"))
+prof_mst <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "profilemaster"))
+prof <- prof_data %>% 
+  left_join(prof_mst, by = c("qu_genre_code", "question_code", "answer_code"))
+
+```
+
+# はじめに
+
+テレビ視聴データを用いるにあたって
+
+- テレビ番組を**語句**
+- 視聴者を**書き手**
+
+とみなすことによって，テキスト分析の手法や解釈が持ってこれると考えている（勝手に）
+
+# 語句の重み
+
+情報検査，コーパス分析，文章の自動要約などを行うとき，語句（今回の場合はテレビ番組）の重要度を示す重みが必要な場合がある．
+重みの値が大きいほど，その語句（番組）が該当するテキストのキーワードになることを意味する．
+語句の重みに関する指標は多く提案されている
+
+**ブーリアン重み付け**  
+対象語句がテキストの中に現れれば1，そうでなければ0
+
+**頻度重み付け**  
+対象語句がテキストの中に現れた回数(TF: term frequency)．  
+長さが異なる複数のテキストについて分析するときは長さの影響を取り除くため，テキストの長さで調整を行った調整頻度(rTF: relative term frequency)を用いることが多い（今回の分析でもそうした）．
+また，対数をとる場合もある
+
+**TF-IDF重み付け**  
+$$\text{TF-IDF} = TF * IDF$$  
+で定義される．ここでIDF(inverted document frequency)は，語句がどのくらいのテキストに現れているかに関する度合いである．最もシンプルなIDFは次で定義される  
+$$\text{IDF} = \rm{log}(\frac{N}{df})$$  
+式の中の$df$は対象語句を含むテキストの数，$N$はテキストの総数である．
+
+**エントロピー重み付け**  
+IDFを単語（番組）がテキスト（視聴者）に現れる（視聴される）確率ととらえ，シャノンのエントロピーによる重み付けを考えることができる
+
+# テレビ視聴におけるTF-IDF
+
+# NMF（非負値行列因子分解）
+
+NMFは得られた非負行列を以下のように二つの行列に分解することを前提としている．
+
+＃使用データ
+
+```{r}
+program %>% 
+  group_by(program_code) %>% 
+  summarise(sum = sum(program_time)) %>% 
+  arrange(desc(sum)) %>% 
+  ggplot(aes(sum))+
+  geom_density()
++
+  scale_x_continuous(limits = c(0,10000))
+```
+
+
+# データ解析
