@@ -68,26 +68,7 @@ prof <- prof_data %>%
 # テキスト数を視聴者数で置き換え
 # 単語の頻度を視聴時間で置き換え
 # tf
-tf <- orgn2 %>% 
-  group_by(house_num, program_code) %>% 
-  summarise(watch_time = sum(watch_time)) %>% 
-  mutate(watch_time = watch_time / sum(watch_time)) %>%  # logとってもいいかも
-  ungroup() 
 
-# idf
-idf <- orgn2 %>% 
-  distinct(program_code, house_num) %>% 
-  count(program_code) %>% 
-  mutate(idf = log(5000.0 / (n + 1.0)) ) %>% 
-  select(-n)
-
-# tf_idf  
-tf_idf <- tf %>% 
-  left_join(idf, by = "program_code") %>% 
-  # transmute(house_num, program_code, tf_idf = watch_time * idf) %>% 
-  collect()
-
-# 
 tf <- dbGetQuery(conn,
            "SELECT
   program_code,
@@ -126,8 +107,7 @@ mat <- tf_idf %>%
 
 mat <- mat[which(apply(mat,1,sum)!=0), which(apply(mat,2,sum)!=0)]
 
-library(NMF)
-res <- nmf(mat, 5)
+res <- nmf(mat, 3, method = "brunet", seed = "ica")
 
 fitted(res) %>% dim
 

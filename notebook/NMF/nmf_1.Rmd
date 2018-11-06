@@ -34,6 +34,8 @@ library(RPostgreSQL)
 library(ggforce)
 library(DT)
 library(NMF)
+library(foreach)
+library(fastICA)
 library(knitr)
 
 theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
@@ -106,18 +108,22 @@ IDFを単語（番組）がテキスト（視聴者）に現れる（視聴さ�
 
 # テレビ視聴におけるTF-IDF
 
-本分析では，テレビ視聴に対するTF-IDFを定義する．テレビ番組集合を$i=\{1,\dots,M\}$とし，視聴者集合を$j=\{1,\dots,N\}$とする．
+本分析では，テレビ視聴に対するTF-IDFを以下で定義する．
+ここで，テレビ番組のインデックスを$i=1,\dots,M$とし，視聴者のインデックスを$j=1,\dots,N$とする．
+また，データ期間内に視聴者$j$が番組$i$を見た視聴時間を$w_{i,j}$と表す．
 
 $$
-\text{TF-IDF}_{i,j} = \text{TF}_{i,j}\times\text{IDF}_{i} =\\
-\frac{w_{i,j}}{\sum_{i}w_{i,j}} \times {\rm log}\left(\frac{N}{df_{i}}\right)
+r_j\text{TF-IDF}_{i,j} = r_j \times \text{TF}_{i,j}\times\text{IDF}_{i} =\\
+\frac{1}{\sum_{i}w_{i,j}} \times w_{i,j} \times {\rm log}\left(\frac{N}{df_{i}}\right)
 $$
 
 # NMF（非負値行列因子分解）
 
-NMFは得られた非負行列を以下のように二つの行列に分解することを前提としている．
+NMFは得られた非負行列を以下のように二つの非負値行列に分解することを前提としている．
 
-＃使用データ
+# データ概要
+
+
 
 ```{r}
 program %>% 
@@ -134,11 +140,11 @@ program %>%
 
 - KL距離ベースの推定
 - 計算時間（並列化なし）
-    - $k=3$ : 35分
+    - $k=3$ : 40分
     - $k=5$ : 44分
     - $k=7$ : 60分
 - 残差
-    - $k=3$ : 15768
+    - $k=3$ : 15654
     - $k=5$ : 14606
     - $k=7$ : 13884
 
