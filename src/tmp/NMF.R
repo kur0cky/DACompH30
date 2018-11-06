@@ -13,6 +13,7 @@ library(ggforce)
 library(DT)
 library(NMF)
 library(fastICA)
+library(doParallel)
 
 # 作図オプション
 theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
@@ -106,10 +107,17 @@ mat <- tf_idf %>%
   as.matrix()
 
 mat <- mat[which(apply(mat,1,sum)!=0), which(apply(mat,2,sum)!=0)]
+rm(list = c("tf", "idf", "tf_idf"));gc()
 
-res <- nmf(mat, 3, method = "brunet", seed = "ica")
+res <- list()
+cl <- makeCluster(2)
+registerDoParallel(cl)
+res <- foreach(i = 3:9, .packages = c("NMF")) %dopar%{
+  nmf(mat, i, method = "brunet", seed = "ica")
+}
+stopCluster(cl)
+gc()
 
-fitted(res) %>% dim
 
 basis <- basis(res)
 pro_mst <- program %>% 
