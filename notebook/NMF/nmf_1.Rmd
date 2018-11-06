@@ -274,7 +274,7 @@ basis9 %>%
   right_join(pro_mst, by = "program_code") %>% 
   group_by(topic) %>% 
   mutate(rank = min_rank(desc(value))) %>% 
-  filter(rank < 21) %>% 
+  filter(rank < 31) %>% 
   select( -program_code, -n, -value) %>% 
   spread(topic, program_name) %>% View()
 ```
