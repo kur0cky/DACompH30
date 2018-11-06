@@ -232,7 +232,6 @@ wordcloud(a$program_name, a$value, random.order = F)
 
 - トピック1とトピック3が綺麗に抜けている
 - 他のトピックも情報番組の放送局など，傾向はあるが，何個かのトピックが混ざっている
-- 
 
 ```{r }
 basis7 <- basis(res7)
