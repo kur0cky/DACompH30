@@ -12,6 +12,7 @@ library(RPostgreSQL)
 library(ggforce)
 library(DT)
 library(NMF)
+library(fastICA)
 
 # 作図オプション
 theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
