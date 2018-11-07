@@ -74,6 +74,8 @@ sta <- conn %>%
 watch_rate <- read_csv("data/processed/watch_rate.csv")
 
 res <- read_rds("data/results_nmf.rds")
+res2 <- read_rds("data/results_nmf2.rds")
+res <- c(res, res2)
 ```
 
 # はじめに
@@ -177,7 +179,13 @@ smr %>%
 ```{r result_summary}
 smr %>% 
   ggplot(aes(rank, residuals))+
-  geom_line()
+  geom_line()+
+  geom_point()+
+  labs(title = "残差", x = "k")
+```
+
+```{r fig1, eval=FALSE}
+ggsave("report/fig/rank_resid.png", height=3, width=3)
 ```
 
 基底ベクトル同士の相関は低くなるはずである．
@@ -197,14 +205,20 @@ cor <- sapply(res, function(x) {
   return( max(abs(a)) )
   })
 smr <- smr %>% 
-  mutate(cor =  cor,
-         mic = mic)
+  mutate(cor =  cor) #%>% 
+  # mutate(mic = mic)
 ```
 
 ```{r cor_rank_line}
 smr %>% 
   ggplot(aes(rank, cor))+
-  geom_line()
+  geom_point()+
+  geom_line()+
+  labs(x= "k", title = "基底行列の最大相関係数")
+```
+
+```{r fig2, eval=FALSE}
+ggsave("report/fig/rank_cor.png", height=3, width=3)
 ```
 
 続いて，MICでも同様の確認を行った  
