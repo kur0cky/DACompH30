@@ -34,9 +34,10 @@ library(RPostgreSQL)
 library(ggforce)
 library(DT)
 library(NMF)
-library(foreach)
-library(fastICA)
 library(knitr)
+library(minerva)
+library(GGally)
+library(ggalluvial)
 
 theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
 ```
@@ -59,19 +60,20 @@ ban <- conn %>%
   tbl(from = dbplyr::in_schema("processed", "bancluster_mst")) 
 ban1 <- conn %>% 
   tbl(from = dbplyr::in_schema("sub_mst", "ban_code1_mst")) 
+ban2 <- conn %>% 
+  tbl(from = dbplyr::in_schema("sub_mst", "ban_code2_mst")) 
 prof_data <- conn %>% 
   tbl(from = dbplyr::in_schema("processed", "profiledata"))
 prof_mst <- conn %>% 
   tbl(from = dbplyr::in_schema("processed", "profilemaster"))
 prof <- prof_data %>% 
   left_join(prof_mst, by = c("qu_genre_code", "question_code", "answer_code"))
+sta <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "sta_mst"))
 
 watch_rate <- read_csv("data/processed/watch_rate.csv")
 
-res3 <- read_rds("data/result_nmf_3.rds")
-res5 <- read_rds("data/result_nmf_5.rds")
-res7 <- read_rds("data/result_nmf_7.rds")
-res9 <- read_rds("data/result_nmf_9.rds")
+res <- read_rds("data/results_nmf.rds")
 ```
 
 # はじめに
@@ -121,49 +123,111 @@ $$
 
 # NMF（非負値行列因子分解）
 
-NMFは得られた非負行列を以下のように二つの非負値行列に分解することを前提としている．
+NMFは得られた非負行列$Y$を以下のように二つの非負値行列$H,U$の行列積で近似する．
+これは$Y$を複数の基底ベクトルの適当な重み付き和で表そうとしていることに相当する．
+
+$$
+Y\simeq HU
+$$
+
+**非負値行列の行列積で近似することのメリット**  
+NMFでは観測データの中で共起する成分をひとまとめにしたものが基底ベクトルの推定結果になる傾向がある．
+また，係数行列の非負性により，係数行列の要素がスパースになる傾向がある．
+これは観測ベクトルと近い方向を向いた基底ベクトル以外の係数はできるだけ小さくした方が良い，という直感と一致する．  
+テレビ視聴がいくつかの共起パターンの加法で表されることがパターンの減算が物理的なメカニズムから想像しにくいこともメリットの一つである．
+
+
+
+本調査では，推定には以下を用いた．
+
+- アルゴリズム : Brunet et al.(2004)．Lee et al.(2001)の改良
+- 初期値 : fastICA
+
+Brunet et al. のアルゴリズムはKL距離に基づいた更新式を用いており，これは観測行列の各成分が独立にポアソン分布に従うを仮定した際の最尤推定に相当する．
 
 # データ概要
 
+前節のテレビ視聴におけるTF-IDFの定義に従って番組-視聴者行列$Y$を算出した．また，その過程では以下の前処理を行った．
 
-
-```{r}
-program %>% 
-  group_by(program_code) %>% 
-  summarise(sum = sum(program_time)) %>% 
-  arrange(desc(sum)) %>% 
-  ggplot(aes(sum))+
-  geom_density()+
-  scale_x_continuous(limits = c(0,10000))
-```
-
+- program_codeが同一で番組名が異なる（特番など）は同一番組とみなした
+- 行和が0になる番組，列和が0になる視聴者を除いた
+- 番組名が同一でも放送時間帯が異なる（program_codeが異なる）ものは別番組とみなした
 
 # データ解析
 
-- KL距離ベースの推定
-- 計算時間（並列化なし）
-    - $k=3$ : 40分
-    - $k=5$ : 44分
-    - $k=7$ : 60分
-    - $k=9$ : 67分
-- 残差
-    - $k=3$ : 15654
-    - $k=5$ : 14606
-    - $k=7$ : 13884
-    - $k=9$ : 13380
+$k$を3~9で変えながら，NMFによる分解とデータ解析を行った
 
+## 結果概要
+
+```{r results_summary}
+smr <- sapply(res, function(x) summary(x)) %>% 
+  t() %>% 
+  as.data.frame()
+smr %>% 
+  kable()
+```
+
+## 基底ベクトルの数について
+
+適切な基底ベクトルの数を考察する
+
+基底ベクトルの数と残差の関係は以下のようになっている．
+まだまだ線形で下がっている印象があり，まだまだやってみるべきかも
+
+```{r result_summary}
+smr %>% 
+  ggplot(aes(rank, residuals))+
+  geom_line()
+```
+
+基底ベクトル同士の相関は低くなるはずである．
+基底ベクトルの相関係数行列の対角成分以外の成分のうち，その絶対値が最大のものを算出し，基底ベクトルの数との関係を以下にプロットした．  
+$k=8$から最大相関係数が跳ね上がっており，適切な$k$は7であると判断できる？？
+
+```{r mic_cor}
+mic <- sapply(res, function(x) {
+  a <- mine(basis(x))$MIC
+  diag(a) <- 0
+  return( max(abs(a)) )
+  })
+
+cor <- sapply(res, function(x) {
+  a <- cor(basis(x))
+  diag(a) <- 0
+  return( max(abs(a)) )
+  })
+smr <- smr %>% 
+  mutate(cor =  cor,
+         mic = mic)
+```
+
+```{r cor_rank_line}
+smr %>% 
+  ggplot(aes(rank, cor))+
+  geom_line()
+```
+
+続いて，MICでも同様の確認を行った  
+こちらではまだまだ行けるような気がする
+
+```{r mic_rank_line}
+smr %>% 
+  ggplot(aes(rank, mic))+
+  geom_line()
+```
 
 
 ## TOP20{.tabset}
 
+各トピック（基底ベクトル，共起パターン）の性質を解釈するため，トピックへの寄与が高いTOP20番組を示す．  
+また，番組名の先頭の数値はstation_codeを示す
 
 ```{r pro_mst}
 pro_mst <- program %>% 
   count(station_code, program_code, program_name) %>% 
   collect() %>% 
-  arrange(program_code, desc(n)) %>% 
   group_by(program_code) %>% 
-  slice(1) %>% 
+  filter(row_number(desc(n)) == 1) %>% 
   mutate(program_name = str_remove_all(program_name, pattern = " "),
          program_name = str_c(station_code, ".", program_name)) %>% 
   select(-station_code) %>% 
@@ -171,13 +235,18 @@ pro_mst <- program %>%
 ```
 
 
+
+
+
+
+
 ### 基底ベクトル3個
 
 - 流石に3個は少なすぎたか
 - なんとなく分かれてそうではある
 
-```{r res3_top20}
-basis3 <- basis(res3)
+```{r table3}
+basis3 <- basis(res[[1]])
 basis3 %>% 
   as.data.frame() %>% 
   rownames_to_column(var = "program_code") %>% 
@@ -185,176 +254,308 @@ basis3 %>%
   gather(topic, value, -program_code) %>% 
   left_join(pro_mst, by = "program_code") %>% 
   group_by(topic) %>% 
-  mutate(rank = min_rank(desc(value))) %>% 
-  filter(rank < 31) %>% 
+  mutate(rank = row_number(desc(value))) %>% 
+  filter(rank < 101) %>% 
   select( -program_code, -n, -value) %>% 
   spread(topic, program_name) %>% 
-  kable()
+  datatable(class = 'cell-border stripe',
+            rownames = FALSE,
+            extensions = 'FixedColumns',
+            options = list(scrollX = TRUE, scrollCollapse = TRUE
+  ))
 ```
 
 
+### 基底ベクトル4個
+
+- 放送局で分かれ始めた？
+
+```{r table4}
+basis4 <- basis(res[[2]])
+basis4 %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "program_code") %>% 
+  as_tibble() %>% 
+  gather(topic, value, -program_code) %>% 
+  left_join(pro_mst, by = "program_code") %>% 
+  group_by(topic) %>% 
+  mutate(rank = row_number(desc(value))) %>% 
+  filter(rank < 101) %>% 
+  select( -program_code, -n, -value) %>% 
+  spread(topic, program_name) %>% 
+  datatable(class = 'cell-border stripe',
+            rownames = FALSE,
+            extensions = 'FixedColumns',
+            options = list(scrollX = TRUE, scrollCollapse = TRUE
+  ))
+```
+
 ### 基底ベクトル5個
 
-- トピック1とトピック3が綺麗に抜けている
-- 他のトピックも情報番組の放送局など，傾向はあるが，何個かのトピックが混ざっている
-- 
+- トピック2と4が綺麗に抜けてる
+- 子供向けトピックとNHKトピック
+- それ以外はよく分からん
+- トピック5はテレ朝？
 
-```{r }
-basis5 <- basis(res5)
+```{r table5}
+basis5 <- basis(res[[3]])
 basis5 %>% 
   as.data.frame() %>% 
   rownames_to_column(var = "program_code") %>% 
   as_tibble() %>% 
   gather(topic, value, -program_code) %>% 
-  right_join(pro_mst, by = "program_code") %>% 
+  left_join(pro_mst, by = "program_code") %>% 
   group_by(topic) %>% 
-  mutate(rank = min_rank(desc(value))) %>% 
-  filter(rank < 21) %>% 
+  mutate(rank = row_number(desc(value))) %>% 
+  filter(rank < 101) %>% 
   select( -program_code, -n, -value) %>% 
-  spread(topic, program_name) 
+  spread(topic, program_name) %>% 
+  datatable(class = 'cell-border stripe',
+            rownames = FALSE,
+            extensions = 'FixedColumns',
+            options = list(scrollX = TRUE, scrollCollapse = TRUE
+  ))
 ```
 
 
-```{r}
-a <- basis5 %>% 
+### 基底ベクトル6個
+
+- 日テレトピック出現（トピック4）
+- トピック3はフジテレビか
+- トピック1は 人気 & 夜報道 番組という感じ
+
+```{r table6}
+basis6 <- basis(res[[4]])
+basis6 %>% 
   as.data.frame() %>% 
   rownames_to_column(var = "program_code") %>% 
   as_tibble() %>% 
   gather(topic, value, -program_code) %>% 
-  right_join(pro_mst, by = "program_code") %>% 
+  left_join(pro_mst, by = "program_code") %>% 
   group_by(topic) %>% 
-  mutate(rank = min_rank(desc(value))) %>% 
-  filter(rank < 101, topic == "V2") 
-
-par(family = "Osaka")
-wordcloud(a$program_name, a$value, random.order = F)
+  mutate(rank = row_number(desc(value))) %>% 
+  filter(rank < 101) %>% 
+  select( -program_code, -n, -value) %>% 
+  spread(topic, program_name) %>% 
+  datatable(class = 'cell-border stripe',
+            rownames = FALSE,
+            extensions = 'FixedColumns',
+            options = list(scrollX = TRUE, scrollCollapse = TRUE
+  ))
 ```
+
 
 ### 基底ベクトル7個
 
-- トピック1とトピック3が綺麗に抜けている
-- 他のトピックも情報番組の放送局など，傾向はあるが，何個かのトピックが混ざっている
 
-```{r }
-basis7 <- basis(res7)
+```{r table7}
+basis7 <- basis(res[[5]])
 basis7 %>% 
   as.data.frame() %>% 
   rownames_to_column(var = "program_code") %>% 
   as_tibble() %>% 
   gather(topic, value, -program_code) %>% 
-  right_join(pro_mst, by = "program_code") %>% 
+  left_join(pro_mst, by = "program_code") %>% 
   group_by(topic) %>% 
-  mutate(rank = min_rank(desc(value))) %>% 
-  filter(rank < 21) %>% 
+  mutate(rank = row_number(desc(value))) %>% 
+  filter(rank < 101) %>% 
   select( -program_code, -n, -value) %>% 
-  spread(topic, program_name) %>% View()
+  spread(topic, program_name) %>% 
+  datatable(class = 'cell-border stripe',
+            rownames = FALSE,
+            extensions = 'FixedColumns',
+            options = list(scrollX = TRUE, scrollCollapse = TRUE
+  ))
 ```
 
 
-```{r}
-a <- basis5 %>% 
+### 基底ベクトル8個
+
+
+```{r table8}
+basis8 <- basis(res[[6]])
+basis8 %>% 
   as.data.frame() %>% 
   rownames_to_column(var = "program_code") %>% 
   as_tibble() %>% 
   gather(topic, value, -program_code) %>% 
-  right_join(pro_mst, by = "program_code") %>% 
+  left_join(pro_mst, by = "program_code") %>% 
   group_by(topic) %>% 
-  mutate(rank = min_rank(desc(value))) %>% 
-  filter(rank < 101, topic == "V2") 
-
-par(family = "Osaka")
-wordcloud(a$program_name, a$value, random.order = F)
+  mutate(rank = row_number(desc(value))) %>% 
+  filter(rank < 101) %>% 
+  select( -program_code, -n, -value) %>% 
+  spread(topic, program_name) %>% 
+  datatable(class = 'cell-border stripe',
+            rownames = FALSE,
+            extensions = 'FixedColumns',
+            options = list(scrollX = TRUE, scrollCollapse = TRUE
+  ))
 ```
 
 
 ### 基底ベクトル9個
 
-- トピック1とトピック3が綺麗に抜けている
-- 他のトピックも情報番組の放送局など，傾向はあるが，何個かのトピックが混ざっている
-- 
 
-```{r}
-basis9 <- basis(res9) %>% 
-  as.data.frame() %>% 
-  rownames_to_column(var = "program_code") %>% 
-  as_tibble() %>% 
-  gather(topic, value, -program_code)
+```{r table9}
+basis9 <- basis(res[[7]])
 basis9 %>% 
-  right_join(pro_mst, by = "program_code") %>% 
-  group_by(topic) %>% 
-  mutate(rank = min_rank(desc(value))) %>% 
-  filter(rank < 31) %>% 
-  select( -program_code, -n, -value) %>% 
-  spread(topic, program_name) %>% View()
-```
-
-
-```{r}
-a <- basis5 %>% 
   as.data.frame() %>% 
   rownames_to_column(var = "program_code") %>% 
   as_tibble() %>% 
   gather(topic, value, -program_code) %>% 
-  right_join(pro_mst, by = "program_code") %>% 
+  left_join(pro_mst, by = "program_code") %>% 
   group_by(topic) %>% 
-  mutate(rank = min_rank(desc(value))) %>% 
-  filter(rank < 101, topic == "V2") 
-
-par(family = "Osaka")
-wordcloud(a$program_name, a$value, random.order = F)
+  mutate(rank = row_number(desc(value))) %>% 
+  filter(rank < 101) %>% 
+  select( -program_code, -n, -value) %>% 
+  spread(topic, program_name) %>% 
+  datatable(class = 'cell-border stripe',
+            rownames = FALSE,
+            extensions = 'FixedColumns',
+            options = list(scrollX = TRUE, scrollCollapse = TRUE)
+  )
 ```
 
-##
 
 
-```{r}
+## 視聴者に注目
+
+$k=7$を例にとり，各トピックに何人の視聴者が属するかを以下に示す  
+各視聴者にもっとも寄与する共起パターンを抽出すると解釈できる
+
+```{r count_topic}
+coef(res[[5]]) %>% 
+  apply(2, function(x) which(x == max(x))) %>% 
+  tibble(topic = .) %>% 
+  ggplot(aes(factor(topic)))+
+  geom_bar(colour = "blue", fill = "skyblue")
+```
+
+推定された係数の散布図をいかに示す．  
+スパースなトピックとそうでないトピックがある  
+
+- 下三角が散布図
+- 対角が各トピックのカーネル密度
+- 上三角が2dカーネル密度
+
+```{r coef_pairplot}
+coef(res[[5]]) %>% 
+  t() %>% 
+  as_tibble() %>% 
+  ggpairs(upper = list(continuous = "density", combo = "box_no_facet"))
+
+```
+
+
+## テレビ局に注目
+
+```{r station_topic}
+basis(res[[5]]) %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "program_code") %>% 
+  as_tibble() %>% 
+  left_join(collect(distinct(program, station_code, program_code)),
+            by = "program_code") %>% 
+  gather(topic, value, -program_code, -station_code) %>% 
+  group_by(station_code, topic) %>% 
+  summarise(value = sum(value)) %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(station_jp, value))+
+  geom_bar(stat="identity")+
+  facet_wrap(~topic)+
+  coord_flip()
+```
+
+## 番組分類に注目
+
+- V2があつくね？
+
+```{r ban1_topic}
+basis(res[[5]]) %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "program_code") %>% 
+  as_tibble() %>% 
+  left_join(collect(distinct(program, ban_code1, program_code)),
+            by = "program_code") %>% 
+  gather(topic, value, -program_code, -ban_code1) %>% 
+  group_by(ban_code1, topic) %>% 
+  summarise(value = sum(value)) %>% 
+  left_join(collect(ban1), by = "ban_code1") %>% 
+  ggplot(aes(ban_code1_naiyou, value))+
+  geom_bar(stat="identity")+
+  facet_wrap(~topic)+
+  coord_flip()
+```
+
+## 中分類に注目
+
+```{r ban2_topic}
+basis(res[[5]]) %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "program_code") %>% 
+  as_tibble() %>% 
+  left_join(collect(distinct(program, ban_code2, program_code)),
+            by = "program_code") %>% 
+  gather(topic, value, -program_code, -ban_code2) %>% 
+  group_by(ban_code2, topic) %>% 
+  summarise(value = sum(value)) %>% 
+  left_join(collect(ban2), by = "ban_code2") %>% 
+  ggplot(aes(ban_code2_naiyou, value))+
+  geom_bar(stat="identity")+
+  facet_wrap(~topic)+
+  coord_flip()
+```
+
+## VRクラスタに注目
+
+図を作りたかっただけ
+
+```{r profile_alluvium}
 innov <- prof %>% 
-  filter(qu_genre_code == 25, question_code == 6) %>% 
+  filter(qu_genre_code == 25, question_code == 4) %>% 
   select(house_num, answer, answer_code) %>% 
   collect() %>% 
   mutate(answer = str_remove_all(answer, pattern = " "))
 
-coef5 <- coef(res5)
-apply(coef5, 2, function(x) which(x == max(x)) ) %>% 
+coef7 <- coef(res[[5]])
+apply(coef7, 2, function(x) which(x == max(x)) ) %>% 
   data.frame(topic = .) %>% 
   rownames_to_column(var = "house_num") %>% 
   as_tibble() %>% 
   mutate(house_num = as.integer(house_num)) %>% 
   left_join(innov, by = "house_num") %>% 
-  replace_na(list(answer = "欠損", answer_code = 10)) %>% 
-  count(topic, answer_code) %>% 
-  group_by(topic) %>% 
-  mutate(rate = n / sum(n)) %>% 
-  ggplot(aes(topic, rate, fill = factor(answer_code)))+
-  geom_bar(stat = "identity")+
-  scale_fill_viridis_d()
+  drop_na(answer) %>% 
+  mutate(answer = fct_reorder(answer, answer_code)) %>% 
+  count(topic, answer) %>% 
+
+  ggplot(aes(axis1 = answer, axis2 = topic, y = n)) +
+  scale_x_discrete(limits = c("answer", "topic"), expand = c(.1, .05)) +
+  geom_alluvium(aes(fill = answer), alpha=.7)+
+  scale_fill_viridis_d()+
+  geom_stratum()+ 
+  geom_text(stat = "stratum", label.strata = TRUE, family = "HiraKakuPro-W3")+
+  theme_classic(base_family = "HiraKakuPro-W3")
   
   
 ```
 
-# 
 
-```{r}
-pro <- program %>% 
-  collect()
-watch_rate %>% 
-  select(station_code, program_start_time, all_watch_rate) %>% 
-  left_join(pro, by = c("station_code", "program_start_time")) %>% 
-  select(program_code, all_watch_rate) %>% 
-  group_by(program_code) %>% 
-  summarise(all_watch_rate = mean(all_watch_rate)) %>%
-  right_join(basis9, by = "program_code") %>% 
-  group_by(topic) %>% 
-  filter(value > mean(value)) %>% 
-  ggplot(aes(all_watch_rate))+
-  geom_histogram()+
-  facet_wrap(~topic)
+# 考察・まとめ
 
+## まとめ
 
-basis(res9) %>% 
-  t() %>% 
-  dist(method = "canberra") %>% 
-  hclust(method = "ward.D2") %>% 
-  plot()
-```
+- テレビ視聴におけるTF-IDFを定義して，NMFした
 
+## 考察
+
+- 特にない
+- 報道番組の傾向が強い
+- 報道番組は別でやったほうが良いかも
+- もしくは，TF-IDFの定義が良くないか
+
+## 感想
+
+- 最近テキストマイニング興味あって，**やってみたかっただけ**
+- 正直，テレビをあまり見ないので**ドメイン知識がない**
+- 結果の解釈が難しくて，**何か気づいたら教えていただきたい**
+- 基底ベクトル数10~15は今計算中

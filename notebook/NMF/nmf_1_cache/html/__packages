@@ -22,3 +22,6 @@ cluster
 NMF
 knitr
 bindrcpp
+minerva
+GGally
+ggalluvial
