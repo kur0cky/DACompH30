@@ -71,6 +71,14 @@ prof <- prof_data %>%
 sta <- conn %>% 
   tbl(from = dbplyr::in_schema("processed", "sta_mst"))
 
+## CM
+jiten <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "jiten_data"))
+brand <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "m_cm_tv_brand"))
+adv <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "m_cm_tv_advertiser"))
+
 watch_rate <- read_csv("data/processed/watch_rate.csv")
 
 res <- read_rds("data/results_nmf.rds")
@@ -185,7 +193,7 @@ smr %>%
 ```
 
 ```{r fig1, eval=FALSE}
-ggsave("report/fig/rank_resid.png", height=3, width=3)
+ggsave("report/fig/rank_resid.png", height=3, width=6)
 ```
 
 基底ベクトル同士の相関は低くなるはずである．
@@ -218,7 +226,7 @@ smr %>%
 ```
 
 ```{r fig2, eval=FALSE}
-ggsave("report/fig/rank_cor.png", height=3, width=3)
+ggsave("report/fig/rank_cor.png", height=3, width=6)
 ```
 
 続いて，MICでも同様の確認を行った  
@@ -240,12 +248,13 @@ smr %>%
 pro_mst <- program %>% 
   count(station_code, program_code, program_name) %>% 
   collect() %>% 
+  ungroup() %>% 
+  arrange(program_code, desc(n)) %>% 
   group_by(program_code) %>% 
-  filter(row_number(desc(n)) == 1) %>% 
+  slice(1) %>% 
   mutate(program_name = str_remove_all(program_name, pattern = " "),
          program_name = str_c(station_code, ".", program_name)) %>% 
-  select(-station_code) %>% 
-  filter(n != 1)
+  select(-station_code)
 ```
 
 
@@ -269,7 +278,7 @@ basis3 %>%
   left_join(pro_mst, by = "program_code") %>% 
   group_by(topic) %>% 
   mutate(rank = row_number(desc(value))) %>% 
-  filter(rank < 101) %>% 
+  filter(rank < 21) %>% 
   select( -program_code, -n, -value) %>% 
   spread(topic, program_name) %>% 
   datatable(class = 'cell-border stripe',
@@ -372,9 +381,9 @@ basis7 %>%
   left_join(pro_mst, by = "program_code") %>% 
   group_by(topic) %>% 
   mutate(rank = row_number(desc(value))) %>% 
-  filter(rank < 101) %>% 
+  filter(rank < 21) %>% 
   select( -program_code, -n, -value) %>% 
-  spread(topic, program_name) %>% 
+  spread(topic, program_name) %>% write_csv("data/table/nmf7.csv")
   datatable(class = 'cell-border stripe',
             rownames = FALSE,
             extensions = 'FixedColumns',
@@ -398,7 +407,7 @@ basis8 %>%
   mutate(rank = row_number(desc(value))) %>% 
   filter(rank < 101) %>% 
   select( -program_code, -n, -value) %>% 
-  spread(topic, program_name) %>% 
+  spread(topic, program_name) %>% write_csv("data/table/nmf8.csv")
   datatable(class = 'cell-border stripe',
             rownames = FALSE,
             extensions = 'FixedColumns',
@@ -422,7 +431,7 @@ basis9 %>%
   mutate(rank = row_number(desc(value))) %>% 
   filter(rank < 101) %>% 
   select( -program_code, -n, -value) %>% 
-  spread(topic, program_name) %>% 
+  spread(topic, program_name) %>% write_csv("data/table/nmf9.csv")
   datatable(class = 'cell-border stripe',
             rownames = FALSE,
             extensions = 'FixedColumns',
@@ -438,11 +447,13 @@ $k=7$を例にとり，各トピックに何人の視聴者が属するかを以
 各視聴者にもっとも寄与する共起パターンを抽出すると解釈できる
 
 ```{r count_topic}
-coef(res[[5]]) %>% 
+coef(res[[6]]) %>% 
   apply(2, function(x) which(x == max(x))) %>% 
   tibble(topic = .) %>% 
   ggplot(aes(factor(topic)))+
-  geom_bar(colour = "blue", fill = "skyblue")
+  geom_bar(colour = "blue", fill = "skyblue")+
+  labs(x = "topic", title = "各世帯のメイントピック")
+ggsave("report/fig/house_topic.png", width=5, height=5)
 ```
 
 推定された係数の散布図をいかに示す．  
@@ -453,7 +464,7 @@ coef(res[[5]]) %>%
 - 上三角が2dカーネル密度
 
 ```{r coef_pairplot}
-coef(res[[5]]) %>% 
+coef(res[[6]]) %>% 
   t() %>% 
   as_tibble() %>% 
   ggpairs(upper = list(continuous = "density", combo = "box_no_facet"))
@@ -464,7 +475,7 @@ coef(res[[5]]) %>%
 ## テレビ局に注目
 
 ```{r station_topic}
-basis(res[[5]]) %>% 
+basis(res[[6]]) %>% 
   as.data.frame() %>% 
   rownames_to_column(var = "program_code") %>% 
   as_tibble() %>% 
@@ -477,7 +488,9 @@ basis(res[[5]]) %>%
   ggplot(aes(station_jp, value))+
   geom_bar(stat="identity")+
   facet_wrap(~topic)+
-  coord_flip()
+  coord_flip()+
+  labs(x = "放送局", title = "放送局ごとの各トピックへの寄与")
+ggsave("report/fig/station_topic.png", width=5, height=5)
 ```
 
 ## 番組分類に注目
@@ -485,7 +498,7 @@ basis(res[[5]]) %>%
 - V2があつくね？
 
 ```{r ban1_topic}
-basis(res[[5]]) %>% 
+basis(res[[6]]) %>% 
   as.data.frame() %>% 
   rownames_to_column(var = "program_code") %>% 
   as_tibble() %>% 
@@ -498,13 +511,15 @@ basis(res[[5]]) %>%
   ggplot(aes(ban_code1_naiyou, value))+
   geom_bar(stat="identity")+
   facet_wrap(~topic)+
-  coord_flip()
+  coord_flip()+
+  labs(title = "番組大分類ごとの各トピックへの寄与", x = "大分類")
+ggsave("report/fig/ban1_topic.png", width=5, height=5)
 ```
 
 ## 中分類に注目
 
 ```{r ban2_topic}
-basis(res[[5]]) %>% 
+basis(res[[6]]) %>% 
   as.data.frame() %>% 
   rownames_to_column(var = "program_code") %>% 
   as_tibble() %>% 
@@ -517,7 +532,9 @@ basis(res[[5]]) %>%
   ggplot(aes(ban_code2_naiyou, value))+
   geom_bar(stat="identity")+
   facet_wrap(~topic)+
-  coord_flip()
+  coord_flip()+
+  labs(title = "番組中分類ごとの各トピックへの寄与", x = "中分類")
+ggsave("report/fig/ban2_topic.png", width=6.5, height=6.5)
 ```
 
 ## VRクラスタに注目
@@ -549,8 +566,64 @@ apply(coef7, 2, function(x) which(x == max(x)) ) %>%
   geom_stratum()+ 
   geom_text(stat = "stratum", label.strata = TRUE, family = "HiraKakuPro-W3")+
   theme_classic(base_family = "HiraKakuPro-W3")
+```
+
+## 時間に着目
+```{r}
+tmp <- program %>% 
+  select(station_code, program_code, program_start_time) %>% 
+  collect()
+basis(res[[6]]) %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "program_code") %>% 
+  as_tibble() %>% 
+  left_join(tmp %>% 
+              mutate(hour = hour(program_start_time)) %>% 
+              count(program_code, program_name, hour) %>% 
+              arrange(program_code, n) %>% 
+              group_by(program_code) %>%  
+              slice(1) %>% 
+              ungroup(),
+            by = "program_code") %>% 
+  select(-program_name, -n) %>% 
+  gather(topic, value, -program_code, -hour) %>% 
+  group_by(topic, hour) %>% 
+  summarise(value = sum(value)) %>% 
+  ggplot(aes(hour, value))+
+  geom_bar(stat = "identity")+
+  facet_wrap(~topic)+
+  labs(title = "放送開始時間帯ごとの各トピックへの寄与", x = "時刻")
+ggsave("report/fig/hour_topic.png", width=5, height=5)
+```
+
+```{r}
+code_rate <- tmp %>% 
+  left_join(watch_rate, by = c("station_code", "program_start_time"))%>% 
+  group_by(program_code) %>% 
+  summarise(watch_rate = mean(all_watch_rate, na.rm=TRUE)) 
+
+basis(res[[6]]) %>% 
+  apply(1, function(x) which(x == max(x))) %>% 
+  data.frame(topic=.) %>% 
+  rownames_to_column(var = "program_code") %>% 
+  as_tibble() %>% 
+  right_join(code_rate, by = "program_code") %>% 
+  drop_na() %>% 
+  ggplot(aes(watch_rate))+
+  geom_histogram()+
+  scale_x_continuous(limits = c(0,0.13))+
+  facet_wrap(~topic)+
+  labs(title = "各トピックの視聴率分布", x = "視聴率")
+ggsave("report/fig/watch_rate_topic.png", width=5, height=5)
   
-  
+```
+
+## トピックの相関
+
+```{r corrr}
+library(corrr)
+corrr::correlate(basis(res[[6]])) %>% 
+  kable()
 ```
 
 
