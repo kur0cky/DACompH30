@@ -1,0 +1,82 @@
+---
+title: "MARS"
+output:
+  html_document:
+    number_sections: true
+    fig_caption: true
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    fig_width: 7
+    theme: cosmo
+    highlight: tango
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+md_extensions: -ascii_identifiers
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE,
+                      cache = TRUE)
+```
+
+```{r import, cache=FALSE}
+library(tidyverse)
+library(lubridate)
+library(dbplyr)
+library(dbplot)
+library(RPostgreSQL)
+library(ggforce)
+library(DT)
+library(NMF)
+library(knitr)
+library(minerva)
+library(GGally)
+library(ggalluvial)
+
+theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
+```
+
+```{r connect, cache=FALSE}
+conn <- dbConnect(PostgreSQL(),
+                  host = scan("connection.txt", what = character())[1],
+                  port = scan("connection.txt", what = character())[2], 
+                  dbname = scan("connection.txt", what = character())[3], 
+                  user = scan("connection.txt", what = character())[4], 
+                  password = scan("connection.txt", what = character())[5])
+
+orgn <- conn %>% 
+  tbl(from = dbplyr::in_schema("edit", "tv_orgn_program_2")) 
+tmp <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_orgn_p_cv")) 
+program <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_program")) 
+ban <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "bancluster_mst")) 
+ban1 <- conn %>% 
+  tbl(from = dbplyr::in_schema("sub_mst", "ban_code1_mst")) 
+ban2 <- conn %>% 
+  tbl(from = dbplyr::in_schema("sub_mst", "ban_code2_mst")) 
+prof_data <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "profiledata"))
+prof_mst <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "profilemaster"))
+prof <- prof_data %>% 
+  left_join(prof_mst, by = c("qu_genre_code", "question_code", "answer_code"))
+sta <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "sta_mst"))
+
+## CM
+jiten <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "jiten_data"))
+brand <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "m_cm_tv_brand"))
+adv <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "m_cm_tv_advertiser"))
+
+watch_rate <- read_csv("data/processed/watch_rate.csv")
+
+```
