@@ -48,27 +48,14 @@ conn <- dbConnect(PostgreSQL(),
                   user = scan("connection.txt", what = character())[4], 
                   password = scan("connection.txt", what = character())[5])
 
-orgn <- conn %>% 
+orgn2 <- conn %>% 
   tbl(from = dbplyr::in_schema("edit", "tv_orgn_program_2")) 
-tmp <- conn %>% 
+orgn1 <- conn %>% 
   tbl(from = dbplyr::in_schema("processed", "tv_orgn_p_cv")) 
-program <- conn %>% 
-  tbl(from = dbplyr::in_schema("processed", "tv_program")) 
-ban <- conn %>% 
-  tbl(from = dbplyr::in_schema("processed", "bancluster_mst")) 
-ban1 <- conn %>% 
-  tbl(from = dbplyr::in_schema("sub_mst", "ban_code1_mst")) 
-ban2 <- conn %>% 
-  tbl(from = dbplyr::in_schema("sub_mst", "ban_code2_mst")) 
-prof_data <- conn %>% 
-  tbl(from = dbplyr::in_schema("processed", "profiledata"))
-prof_mst <- conn %>% 
-  tbl(from = dbplyr::in_schema("processed", "profilemaster"))
-prof <- prof_data %>% 
-  left_join(prof_mst, by = c("qu_genre_code", "question_code", "answer_code"))
-sta <- conn %>% 
-  tbl(from = dbplyr::in_schema("processed", "sta_mst"))
-
+play <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_play_p_cv"))
+web <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "t_weblog"))
 ## CM
 jiten <- conn %>% 
   tbl(from = dbplyr::in_schema("processed", "jiten_data"))
@@ -76,7 +63,76 @@ brand <- conn %>%
   tbl(from = dbplyr::in_schema("processed", "m_cm_tv_brand"))
 adv <- conn %>% 
   tbl(from = dbplyr::in_schema("processed", "m_cm_tv_advertiser"))
-
-watch_rate <- read_csv("data/processed/watch_rate.csv")
-
+## その他マスタ
+program <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_program")) 
+ban <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "bancluster_mst")) 
+ban1 <- conn %>% 
+  tbl(from = dbplyr::in_schema("sub_mst", "ban_code1_mst")) 
+sta <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "sta_mst"))
+sample <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_sample_p_cv"))
+job <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "job_mst"))
+## アンケート
+prof_data <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "profiledata"))
+prof_mst <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "profilemaster"))
+prof <- prof_data %>% 
+  left_join(prof_mst, by = c("qu_genre_code", "question_code", "answer_code"))
 ```
+
+# はじめに
+
+Cyber Agentの論文「インターネットテレビサービスAbemaTVにおけるユーザーアクティビティ分析」を追試したい
+
+## 論文要約
+
+MARS(multivariate adaptive regression splines)を用いてAbemaTVユーザの継続・離脱分析を行い，離脱につながるような行動を示唆した．
+
+**課題**  
+インターネット上のサービスは据え置き型のテレビと比べて，ユーザーにとっては初期費用がかからないなどの理由により導入が簡単な反面，サービス利用継続率が時間とともに低下していきやすいという問題点を抱えている．  
+ドラマとかに絞れば今回のデータにも使えそう
+
+**目的変数**  
+週間アクティブ日数$y$
+
+
+```{r}
+dau <- orgn1 %>% 
+  distinct(house_num, br_date) %>% 
+  collect()
+  
+dau %>% 
+  count(br_date) %>% 
+  ggplot(aes(br_date, n))+
+  geom_line()+
+  labs(title = "DAU")
+
+dau %>% 
+  mutate(year = year(br_date),
+         week = week(br_date)) %>% 
+  distinct(year, week, house_num) %>% 
+  count(year, week) %>% 
+  mutate(index = 1:n()) %>% 
+  ggplot(aes(index, n))+
+  geom_line()+
+  labs(title = "WAU")
+```
+
+
+```{r}
+wau <- dau %>% 
+  mutate(year = year(br_date),
+         week = week(br_date)) %>% 
+  count(year, week, house_num) %>% 
+  spread(house_num, n, fill=0) %>% 
+  gather(house_num, n, -year, -week)
+wau %>% 
+  ggplot(aes(n))+
+  geom_bar()
+```
+
