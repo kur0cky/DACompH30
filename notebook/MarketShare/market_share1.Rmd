@@ -264,3 +264,11 @@ watch_time_daily_sta %>%
   scale_fill_viridis_d()
 ```
 
+# ドラマに絞っていく
+
+```{r}
+dbGetQuery(conn"SELECT
+             *
+           ")
+```
+
