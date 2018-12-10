@@ -1,0 +1,266 @@
+---
+title: "market share 1"
+author: "Yutaka Kuroki"
+date: "2018/12/10"
+output:
+  html_document:
+    number_sections: true
+    fig_caption: true
+    toc: true
+    toc_float: true
+    toc_depth: 2
+    fig_width: 7
+    theme: cosmo
+    highlight: tango
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+md_extensions: -ascii_identifiers
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE,
+                      cache = TRUE)
+```
+
+```{r import, cache=FALSE}
+library(tidyverse)
+library(lubridate)
+library(dbplyr)
+library(dbplot)
+library(RPostgreSQL)
+
+theme_set(theme_bw(base_family = "HiraKakuPro-W3"))
+```
+
+```{r connect, cache=FALSE}
+conn <- dbConnect(PostgreSQL(),
+                  host = scan("connection.txt", what = character())[1],
+                  port = scan("connection.txt", what = character())[2], 
+                  dbname = scan("connection.txt", what = character())[3], 
+                  user = scan("connection.txt", what = character())[4], 
+                  password = scan("connection.txt", what = character())[5])
+
+orgn2 <- conn %>% 
+  tbl(from = dbplyr::in_schema("edit", "tv_orgn_program_2")) 
+orgn <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_orgn_p_cv")) 
+program <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "tv_program")) 
+ban <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "bancluster_mst")) 
+ban1 <- conn %>% 
+  tbl(from = dbplyr::in_schema("sub_mst", "ban_code1_mst")) 
+ban2 <- conn %>% 
+  tbl(from = dbplyr::in_schema("sub_mst", "ban_code2_mst")) 
+prof_data <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "profiledata"))
+prof_mst <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "profilemaster"))
+prof <- prof_data %>% 
+  left_join(prof_mst, by = c("qu_genre_code", "question_code", "answer_code"))
+sta <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "sta_mst"))
+
+## CM
+jiten <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "jiten_data"))
+brand <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "m_cm_tv_brand"))
+adv <- conn %>% 
+  tbl(from = dbplyr::in_schema("processed", "m_cm_tv_advertiser"))
+
+# watch_rate <- read_csv("data/processed/watch_rate.csv")
+
+res <- read_rds("data/results_nmf.rds")
+res2 <- read_rds("data/results_nmf2.rds")
+res <- c(res, res2)
+```
+
+# introduction
+
+視聴者という有限な資源を複数のエージェント（キー局）が取り合っている，という視点からデータを眺めてみる．  
+例えばドラマというものを例にあげると，
+
+1. 俳優や原作についているコア視聴者
+2. ドラマというエンターテイメントが好きな視聴者
+3. 暇なのでとりあえずドラマを見ている視聴者
+
+が考えられる．1や2の視聴者は，「ドラマがつまらなかったら切る」 or 「話題になったら見始める」といった行動をとると考えられる
+
+
+# 
+
+```{r watch_time_sta}
+watch_time_sta <- orgn %>% 
+  filter(data_agg_type == 1) %>% 
+  mutate(watch_time = br_end_datetime - br_start_datetime)%>% 
+  group_by(station_code) %>% 
+  summarise(watch_time = sum(watch_time, na.rm=TRUE)) %>% 
+  collect() %>% 
+  mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) 
+```
+
+```{r watch_time_sta_bar}
+watch_time_sta %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(station_jp, watch_time))+
+  geom_bar(stat = "identity")+
+  labs(y = "hour", x = "station name",
+       title = "watch time by station")
+```
+
+```{r program_time_sta}
+program_time_sta <- program %>% 
+  group_by(station_code) %>% 
+  summarise(program_time = sum(program_time, na.rm = TRUE)) %>% 
+  collect()
+```
+
+```{r program_time_sta_bar}
+program_time_sta %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(station_jp, program_time))+
+  geom_bar(stat = "identity")+
+  labs(y = "hour", x = "station name",
+       title = "program time by station")
+```
+
+
+```{r}
+program_time_sta %>% 
+  left_join(watch_time_sta, by = "station_code") %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(program_time, watch_time))+
+  geom_text(aes(label = station_jp), family = "Osaka")+
+  scale_x_continuous(limits = c(0,550000))+
+  scale_y_continuous(limits = c(0,1600000))
+```
+
+```{r}
+program_time_sta %>% 
+  left_join(watch_time_sta, by = "station_code") %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  mutate(watch_time_program_time = watch_time / program_time) %>% 
+  ggplot(aes(station_jp, watch_time_program_time))+
+  geom_bar(stat = "identity")+
+  labs(x = "station name", y = "watch time / program time")
+```
+
+# 全体のシェア
+
+データ期間全体を通してテレビ視聴時間の増減はなさそう  
+というかデータ期間が1年しかないので年周期なのかテレビ視聴時間の増減なのかわからない
+
+```{r watch_time_daily}
+watch_time_daily <- orgn %>% 
+  mutate(watch_time = br_end_datetime - br_start_datetime) %>% 
+  group_by(br_date)%>% 
+  summarise(watch_time = sum(watch_time, na.rm=TRUE)) %>% 
+  collect() 
+
+watch_time_daily %>% 
+  mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) %>% 
+  ggplot(aes(br_date, watch_time))+
+  geom_line()+
+  labs(x = "date", y = "hour")
+```
+
+## チャンネルごと
+
+- 紅白ヤベーって感じ．
+- 日テレのスパイクはなんだ？年末年始と9月頭？ 
+- TBSが1週間内の変動が大きい．どこかに強い番組を固めてる曜日がある？
+
+```{r watch_time_daily_sta}
+watch_time_daily_sta <- orgn %>% 
+  mutate(watch_time = br_end_datetime - br_start_datetime) %>% 
+  group_by(br_date, station_code)%>% 
+  summarise(watch_time = sum(watch_time, na.rm=TRUE)) %>% 
+  collect() %>% 
+  ungroup()
+
+watch_time_daily_sta %>% 
+  mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(br_date, watch_time, group = station_jp, colour = station_jp))+
+  geom_line()+
+  labs(x = "date", y = "hour")+
+  scale_colour_viridis_d()
+
+watch_time_daily_sta %>% 
+  mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(br_date, watch_time, group = station_jp, colour = station_jp))+
+  geom_line()+
+  labs(x = "date", y = "hour")+
+  facet_wrap(~station_jp)+
+  scale_colour_viridis_d()
+```
+
+時系列プロットを見てもよく分からないので積み上げ折れ線グラフを書いてみる
+
+- 日テレとテレ朝のシェアが強いのがわかる．
+- グラフの難点として，上端と下端以外のスパイクなどがわかりにくい事がある
+
+```{r areaplot_watch_time_daily_sta}
+watch_time_daily_sta %>% 
+  mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(br_date, watch_time, group = station_jp, colour = station_jp, fill=station_jp))+
+  geom_line(position="stack")+
+  geom_ribbon(aes(ymin = 0, ymax = watch_time), position = "stack")+
+  labs(x = "date", y = "hour")+
+  scale_colour_viridis_d()+
+  scale_fill_viridis_d()
+
+watch_time_daily_sta %>% 
+  mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) %>% 
+  group_by(br_date) %>% 
+  mutate(rate = watch_time / sum(watch_time))%>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(br_date, rate, group = station_jp, colour = station_jp, fill=station_jp))+
+  geom_line(position="stack")+
+  geom_ribbon(aes(ymin = 0, ymax = rate), position = "stack")+
+  labs(x = "date", y = "rate")+
+  scale_colour_viridis_d()+
+  scale_fill_viridis_d()
+```
+
+dailyで見てもよくわからないのでmonthlyでみる
+
+- ほぼ横ばい
+- ハンドリングが面倒臭くて2017年と2018年の切れ目がうまくいってないので折れ線の方では大変一瞬0に近づいている
+- NHKの2月中旬がやたらシェア大きい（大晦日並）なのは何かがあるんでしょうか
+
+```{r}
+watch_time_daily_sta %>%  
+  mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) %>% 
+  group_by(week = week(br_date)) %>% 
+  mutate(br_date = min(br_date)) %>% 
+  group_by(br_date, station_code) %>% 
+  summarise(watch_time = sum(watch_time)) %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(br_date, watch_time, group = station_jp, colour = station_jp))+
+  geom_line()+
+  labs(x = "date", y = "hour")+
+  scale_colour_viridis_d()
+
+watch_time_daily_sta %>%  
+  mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) %>% 
+  group_by(week = week(br_date)) %>% 
+  mutate(br_date = min(br_date)) %>% 
+  group_by(br_date, station_code) %>% 
+  summarise(watch_time = sum(watch_time)) %>% 
+  mutate(rate = watch_time / sum(watch_time))%>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(br_date, rate, group = station_jp, colour = station_jp, fill=station_jp))+
+  geom_line(position="stack")+
+  geom_ribbon(aes(ymin = 0, ymax = rate), position = "stack")+
+  labs(x = "date", y = "rate")+
+  scale_colour_viridis_d()+
+  scale_fill_viridis_d()
+```
+
