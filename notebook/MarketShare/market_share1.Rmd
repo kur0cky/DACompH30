@@ -272,3 +272,77 @@ dbGetQuery(conn"SELECT
            ")
 ```
 
+br_start_datetime
+br_end_datetime
+br_day_week
+house_num
+station_code
+tv_num
+data_agg_type
+data_seq
+br_date
+program_code
+program_date
+program_start_time
+program_time
+program_end_time
+ban_code1
+ban_code2
+
+```{r}
+orgn %>% 
+  select(br_start_datetime, br_end_datetime, house_num, station_code, data_agg_type, br_date) %>% 
+  left_join(select(program,
+                   station_code, program_code, program_date, program_start_time, program_end_time),
+            by = c("br_date" = "program_date", "station_code")) %>% 
+  filter(program_start_time < br_end_datetime, 
+         program_end_time > br_start_datetime) %>% 
+  mutate(flag1 = br_start_datetime < program_start_time,
+         flag2 = br_end_datetime < program_end_time) %>% 
+  mutate(br_start_datetime = if_else(flag1==TRUE, program_start_time, br_start_datetime),
+         br_end_datetime = if_else(flag2 == TRUE, br_end_datetime, program_end_time)) %>% 
+  select(-flag1, -flag2)
+```
+
+
+```{r}
+true_watch <- orgn %>% 
+  left_join(select(program,
+                   station_code, program_code, program_date, program_start_time, program_end_time),
+            by = c("br_date" = "program_date", "station_code")) %>% 
+  filter(program_start_time < br_end_datetime, 
+         program_end_time > br_start_datetime) %>% 
+  mutate(flag1 = br_start_datetime < program_start_time,
+         flag2 = br_end_datetime < program_end_time) %>% 
+  mutate(br_start_datetime = if_else(flag1==TRUE, program_start_time, br_start_datetime),
+         br_end_datetime = if_else(flag2 == TRUE, br_end_datetime, program_end_time)) %>% 
+  select(-flag1, -flag2)
+
+daily_watch <- true_watch %>% 
+  left_join(program, by = c("station_code", "program_code", "program_start_time", "program_end_time")) %>% 
+  group_by(station_code, br_date, ban_code1) %>% 
+  summarise(watch_time = sum(br_end_datetime - br_start_datetime, na.rm=TRUE)) %>% 
+  ungroup() %>% 
+  collect()
+daily_watch %>% 
+  count
+
+daily_watch %>% 
+  mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) %>%  
+  group_by(br_date, ban_code1) %>% 
+  mutate(rate = watch_time / sum(watch_time)) %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(br_date, rate, group = station_jp, colour = station_jp, fill=station_jp))+
+  geom_line(position="stack")+
+  geom_ribbon(aes(ymin = 0, ymax = rate), position = "stack")+
+  labs(x = "date", y = "rate")+
+  scale_colour_viridis_d()+
+  scale_fill_viridis_d()+
+  facet_wrap(~ban_code1, scale = "free_y")
+  
+  ggplot(aes(br_date, watch_time, group = station_code))+
+  geom_line(aes(colour = station_code))+
+  facet_wrap(~ban_code1, scale = "free_y")+
+  scale_color_viridis_c()
+```
+
