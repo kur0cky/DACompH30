@@ -6,6 +6,7 @@
 *.RData
 *.rdb
 *.rdx
+*_cache
 connection.txt
 .ga-token.rds
 notebook/EDA/connection.txt
