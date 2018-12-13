@@ -90,6 +90,9 @@ res <- c(res, res2)
 
 が考えられる．1や2の視聴者は，「ドラマがつまらなかったら切る」 or 「話題になったら見始める」といった行動をとると考えられる
 
+## purpose
+
+
 
 # 
 
@@ -229,7 +232,7 @@ watch_time_daily_sta %>%
   scale_fill_viridis_d()
 ```
 
-dailyで見てもよくわからないのでmonthlyでみる
+dailyで見てもよくわからないのでweeklyでみる
 
 - ほぼ横ばい
 - ハンドリングが面倒臭くて2017年と2018年の切れ目がうまくいってないので折れ線の方では大変一瞬0に近づいている
@@ -266,11 +269,6 @@ watch_time_daily_sta %>%
 
 # ドラマに絞っていく
 
-```{r}
-dbGetQuery(conn"SELECT
-             *
-           ")
-```
 
 br_start_datetime
 br_end_datetime
@@ -305,6 +303,8 @@ orgn %>%
 ```
 
 
+ドラマがかなり面白そうでは？？
+
 ```{r}
 true_watch <- orgn %>% 
   left_join(select(program,
@@ -324,12 +324,18 @@ daily_watch <- true_watch %>%
   summarise(watch_time = sum(br_end_datetime - br_start_datetime, na.rm=TRUE)) %>% 
   ungroup() %>% 
   collect()
-daily_watch %>% 
-  count
+
 
 daily_watch %>% 
-  mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) %>%  
-  group_by(br_date, ban_code1) %>% 
+  left_join(collect(ban1), by = "ban_code1") %>% 
+  mutate(watch_time = as.integer(str_sub(watch_time, 1, -7)),
+         week = week(br_date),
+         year = year(br_date)) %>% 
+  group_by(year, week) %>% 
+  mutate(br_date = min(br_date)) %>% 
+  group_by(br_date, station_code, ban_code1_naiyou) %>% 
+  summarise(watch_time = sum(watch_time)) %>% 
+  group_by(br_date, ban_code1_naiyou) %>% 
   mutate(rate = watch_time / sum(watch_time)) %>% 
   left_join(collect(sta), by = "station_code") %>% 
   ggplot(aes(br_date, rate, group = station_jp, colour = station_jp, fill=station_jp))+
@@ -338,11 +344,7 @@ daily_watch %>%
   labs(x = "date", y = "rate")+
   scale_colour_viridis_d()+
   scale_fill_viridis_d()+
-  facet_wrap(~ban_code1, scale = "free_y")
-  
-  ggplot(aes(br_date, watch_time, group = station_code))+
-  geom_line(aes(colour = station_code))+
-  facet_wrap(~ban_code1, scale = "free_y")+
-  scale_color_viridis_c()
+  facet_wrap(~ban_code1_naiyou, scale = "free_y")
+
 ```
 
