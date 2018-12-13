@@ -1,5 +1,5 @@
 ---
-title: "market share 1"
+title: "watch time share 1"
 author: "Yutaka Kuroki"
 date: "2018/12/10"
 output:
@@ -72,11 +72,6 @@ brand <- conn %>%
 adv <- conn %>% 
   tbl(from = dbplyr::in_schema("processed", "m_cm_tv_advertiser"))
 
-# watch_rate <- read_csv("data/processed/watch_rate.csv")
-
-res <- read_rds("data/results_nmf.rds")
-res2 <- read_rds("data/results_nmf2.rds")
-res <- c(res, res2)
 ```
 
 # introduction
@@ -92,28 +87,56 @@ res <- c(res, res2)
 
 ## purpose
 
+なんか後付けで決める
 
+# おさらい
 
-# 
+タイムシフト・リアルタイム合わせた視聴について，データをおさらいする
+
+## キー局ごとの獲得視聴時間
+
+単純に，データ期間内でどれだけの視聴時間を獲得できているかを確認する．  
+また，タイムシフトによる重複視聴はここでは考慮しない
 
 ```{r watch_time_sta}
 watch_time_sta <- orgn %>% 
-  filter(data_agg_type == 1) %>% 
-  mutate(watch_time = br_end_datetime - br_start_datetime)%>% 
-  group_by(station_code) %>% 
+  mutate(watch_time = br_end_datetime - br_start_datetime) %>% 
+  group_by(station_code, data_agg_type) %>% 
   summarise(watch_time = sum(watch_time, na.rm=TRUE)) %>% 
   collect() %>% 
   mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) 
 ```
 
+以下のことがわかる
+
+- 日テレが一番人気でその次がフジ・テレ朝
+- テレ東は獲得時間が少ないもののタイムシフト率がダントツで高い
+- 逆に日テレ・NHK総合はタイムシフト率が低い
+
 ```{r watch_time_sta_bar}
 watch_time_sta %>% 
   left_join(collect(sta), by = "station_code") %>% 
-  ggplot(aes(station_jp, watch_time))+
+  ggplot(aes(station_jp, watch_time, fill = factor(data_agg_type)))+
   geom_bar(stat = "identity")+
+  scale_fill_viridis_d(name = "data_agg_type")+
   labs(y = "hour", x = "station name",
-       title = "watch time by station")
+       title = "キー局ごとの総合獲得視聴時間")
+
+watch_time_sta %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  group_by(station_jp) %>% 
+  mutate(rate = watch_time / sum(watch_time)) %>% 
+  ggplot(aes(station_jp, rate, fill = factor(data_agg_type)))+
+  geom_bar(stat = "identity")+
+  scale_fill_viridis_d(name = "data_agg_type")+
+  labs(y = "rate", x = "station name",
+       title = "キー局ごとの視聴形態の割合")
 ```
+
+## 総放送時間
+
+総放送時間はを可視化し確認する．  
+どの局も総放送時間はほとんど変わらず，Eテレだけ若干少ないことがわかる
 
 ```{r program_time_sta}
 program_time_sta <- program %>% 
@@ -128,34 +151,35 @@ program_time_sta %>%
   ggplot(aes(station_jp, program_time))+
   geom_bar(stat = "identity")+
   labs(y = "hour", x = "station name",
-       title = "program time by station")
+       title = "キー局ごとの総放送時間")
 ```
 
+## 放送時間と視聴時間
 
-```{r}
+総放送時間に差がないため，総視聴時間をそのままシェアと思ってしまって良い
+
+```{r program_watch}
 program_time_sta %>% 
   left_join(watch_time_sta, by = "station_code") %>% 
   left_join(collect(sta), by = "station_code") %>% 
+  group_by(station_jp, program_time) %>% 
+  summarise(watch_time = sum(watch_time)) %>% 
   ggplot(aes(program_time, watch_time))+
   geom_text(aes(label = station_jp), family = "Osaka")+
   scale_x_continuous(limits = c(0,550000))+
-  scale_y_continuous(limits = c(0,1600000))
-```
-
-```{r}
-program_time_sta %>% 
-  left_join(watch_time_sta, by = "station_code") %>% 
-  left_join(collect(sta), by = "station_code") %>% 
-  mutate(watch_time_program_time = watch_time / program_time) %>% 
-  ggplot(aes(station_jp, watch_time_program_time))+
-  geom_bar(stat = "identity")+
-  labs(x = "station name", y = "watch time / program time")
+  scale_y_continuous(limits = c(0,1600000))+
+  labs(x = "総放送時間", y = "総視聴時間",
+       title = "キー局ごとの放送時間と視聴時間の散布図")
 ```
 
 # 全体のシェア
 
-データ期間全体を通してテレビ視聴時間の増減はなさそう  
-というかデータ期間が1年しかないので年周期なのかテレビ視聴時間の増減なのかわからない
+ここからはシェアの移り変わりについて注目していく
+
+## 日次総視聴時間
+
+- データ期間全体を通してテレビ視聴時間の増減はなさそう
+- というかデータ期間が1年しかないので年周期なのかテレビ視聴時間の増減なのかわからない
 
 ```{r watch_time_daily}
 watch_time_daily <- orgn %>% 
@@ -168,13 +192,15 @@ watch_time_daily %>%
   mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) %>% 
   ggplot(aes(br_date, watch_time))+
   geom_line()+
-  labs(x = "date", y = "hour")
+  labs(x = "date", y = "hour",
+       title = "日次総視聴時間")
 ```
 
-## チャンネルごと
+## チャンネルごとの日次総視聴時間
 
-- 紅白ヤベーって感じ．
-- 日テレのスパイクはなんだ？年末年始と9月頭？ 
+チャンネルごとに日次総視聴時間を確認
+
+- どの局でも曜日の効果が支配的 
 - TBSが1週間内の変動が大きい．どこかに強い番組を固めてる曜日がある？
 
 ```{r watch_time_daily_sta}
@@ -190,7 +216,8 @@ watch_time_daily_sta %>%
   left_join(collect(sta), by = "station_code") %>% 
   ggplot(aes(br_date, watch_time, group = station_jp, colour = station_jp))+
   geom_line()+
-  labs(x = "date", y = "hour")+
+  labs(x = "date", y = "hour",
+       title = "局ごとの日次総視聴時間")+
   scale_colour_viridis_d()
 
 watch_time_daily_sta %>% 
@@ -203,7 +230,8 @@ watch_time_daily_sta %>%
   scale_colour_viridis_d()
 ```
 
-時系列プロットを見てもよく分からないので積み上げ折れ線グラフを書いてみる
+シェアを見るために積み上げ折れ線グラフを書いてみる．  
+また，割合のプロットも示す
 
 - 日テレとテレ朝のシェアが強いのがわかる．
 - グラフの難点として，上端と下端以外のスパイクなどがわかりにくい事がある
@@ -232,13 +260,19 @@ watch_time_daily_sta %>%
   scale_fill_viridis_d()
 ```
 
+## 週次
+
 dailyで見てもよくわからないのでweeklyでみる
 
 - ほぼ横ばい
 - ハンドリングが面倒臭くて2017年と2018年の切れ目がうまくいってないので折れ線の方では大変一瞬0に近づいている
-- NHKの2月中旬がやたらシェア大きい（大晦日並）なのは何かがあるんでしょうか
+- NHKの2月中旬がやたらシェア大きい（大晦日並）．平昌オリンピック？
+- 2018年ではテレ朝とフジが逆転している？
+- Eテレの安定感がすごい
+- 2017年10月以降のNHK総合が低くまとまっている
+- TBSが上がり調子
 
-```{r}
+```{r weekly_watch_time}
 watch_time_daily_sta %>%  
   mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) %>% 
   group_by(week = week(br_date)) %>% 
@@ -248,8 +282,23 @@ watch_time_daily_sta %>%
   left_join(collect(sta), by = "station_code") %>% 
   ggplot(aes(br_date, watch_time, group = station_jp, colour = station_jp))+
   geom_line()+
-  labs(x = "date", y = "hour")+
+  labs(x = "date", y = "hour",
+       title = "局ごとの週次総視聴時間")+
   scale_colour_viridis_d()
+
+watch_time_daily_sta %>%  
+  mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) %>% 
+  group_by(week = week(br_date)) %>% 
+  mutate(br_date = min(br_date)) %>% 
+  group_by(br_date, station_code) %>% 
+  summarise(watch_time = sum(watch_time)) %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(br_date, watch_time, group = station_jp, colour = station_jp, fill=station_jp))+
+  geom_line(position="stack")+
+  geom_ribbon(aes(ymin = 0, ymax = watch_time), position = "stack")+
+  labs(x = "date", y = "watch time")+
+  scale_colour_viridis_d()+
+  scale_fill_viridis_d()
 
 watch_time_daily_sta %>%  
   mutate(watch_time = as.integer(str_sub(watch_time, 1, -7))) %>% 
@@ -267,46 +316,23 @@ watch_time_daily_sta %>%
   scale_fill_viridis_d()
 ```
 
-# ドラマに絞っていく
+# 大分類ごと
 
+細分化していくとタイムシフトによる重複の影響が大きくなりそうなので，とりあえずリアルタイムのみに着目してみる
 
-br_start_datetime
-br_end_datetime
-br_day_week
-house_num
-station_code
-tv_num
-data_agg_type
-data_seq
-br_date
-program_code
-program_date
-program_start_time
-program_time
-program_end_time
-ban_code1
-ban_code2
+アニメ：やや安定的，クールの切れ目がどこなのかわからない．局ごとに複数個アニメを放送してると思われる
+スポーツ：かなり不安定
+その他娯楽番組：安定的．
+ドラマ：やや安定的．クールの切れ目がはっきりとわかる
+映画：不安定．そもそも放送時間自体が期間を通して不安定
+音楽：不安定．同上
+教育・教養・実用：かなり安定的
+報道：かなり安定的
 
-```{r}
-orgn %>% 
-  select(br_start_datetime, br_end_datetime, house_num, station_code, data_agg_type, br_date) %>% 
-  left_join(select(program,
-                   station_code, program_code, program_date, program_start_time, program_end_time),
-            by = c("br_date" = "program_date", "station_code")) %>% 
-  filter(program_start_time < br_end_datetime, 
-         program_end_time > br_start_datetime) %>% 
-  mutate(flag1 = br_start_datetime < program_start_time,
-         flag2 = br_end_datetime < program_end_time) %>% 
-  mutate(br_start_datetime = if_else(flag1==TRUE, program_start_time, br_start_datetime),
-         br_end_datetime = if_else(flag2 == TRUE, br_end_datetime, program_end_time)) %>% 
-  select(-flag1, -flag2)
-```
-
-
-ドラマがかなり面白そうでは？？
-
-```{r}
+```{r true_watch}
+# 番組ごとの視聴時間・放送時間・視聴率を出すためのハンドリング
 true_watch <- orgn %>% 
+  filter(data_agg_type == 1) %>% 
   left_join(select(program,
                    station_code, program_code, program_date, program_start_time, program_end_time),
             by = c("br_date" = "program_date", "station_code")) %>% 
@@ -324,7 +350,66 @@ daily_watch <- true_watch %>%
   summarise(watch_time = sum(br_end_datetime - br_start_datetime, na.rm=TRUE)) %>% 
   ungroup() %>% 
   collect()
+```
 
+
+### 折れ線グラフ
+
+- ドラマはテレ朝が強い
+- NHKは朝ドラか
+- 
+
+```{r watch_share_by_ban1_line}
+
+daily_watch %>% 
+  left_join(collect(ban1), by = "ban_code1") %>% 
+  mutate(watch_time = as.integer(str_sub(watch_time, 1, -7)),
+         week = week(br_date),
+         year = year(br_date)) %>% 
+  group_by(year, week) %>% 
+  mutate(br_date = min(br_date)) %>% 
+  group_by(br_date, station_code, ban_code1_naiyou) %>% 
+  summarise(watch_time = sum(watch_time)) %>% 
+  group_by(br_date, ban_code1_naiyou) %>% 
+  mutate(rate = watch_time / sum(watch_time)) %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(br_date, watch_time, group = station_jp, colour = station_jp, fill=station_jp))+
+  geom_line()+
+  labs(x = "date", y = "watch_time")+
+  scale_colour_viridis_d()+
+  scale_fill_viridis_d()+
+  facet_wrap(~ban_code1_naiyou, scale = "free_y")
+
+```
+
+### 積み上げ折れ線グラフ
+
+```{r watch_share_by_ban1_cumline}
+
+daily_watch %>% 
+  left_join(collect(ban1), by = "ban_code1") %>% 
+  mutate(watch_time = as.integer(str_sub(watch_time, 1, -7)),
+         week = week(br_date),
+         year = year(br_date)) %>% 
+  group_by(year, week) %>% 
+  mutate(br_date = min(br_date)) %>% 
+  group_by(br_date, station_code, ban_code1_naiyou) %>% 
+  summarise(watch_time = sum(watch_time)) %>% 
+  group_by(br_date, ban_code1_naiyou) %>% 
+  mutate(rate = watch_time / sum(watch_time)) %>% 
+  left_join(collect(sta), by = "station_code") %>% 
+  ggplot(aes(br_date, watch_time, group = station_jp, colour = station_jp, fill=station_jp))+
+  geom_line(position="stack")+
+  geom_ribbon(aes(ymin = 0, ymax = rate), position = "stack")+
+  labs(x = "date", y = "watch_time")+
+  scale_colour_viridis_d()+
+  scale_fill_viridis_d()+
+  facet_wrap(~ban_code1_naiyou, scale = "free_y")
+```
+
+### 積み上げ割合
+
+```{r watch_share_by_ban1_rate}
 
 daily_watch %>% 
   left_join(collect(ban1), by = "ban_code1") %>% 
@@ -345,6 +430,26 @@ daily_watch %>%
   scale_colour_viridis_d()+
   scale_fill_viridis_d()+
   facet_wrap(~ban_code1_naiyou, scale = "free_y")
-
 ```
 
+# これから
+
+上記の可視化やまとめは，全時間帯がまとまってしまっている．例えば
+
+- 9時〜12時の報道番組
+- 19時〜23時のドラマ
+
+など時間帯を絞ることでより面白い知見が得られるかもしれない．
+
+目的のない可視化・分析をするのは辛いし先が見えない．何か目的がほしい
+
+マーケティング・ミックス・モデル（MMM）的なことができないかな，とか思ってる．
+
+こないだ軽く紹介したマルコフ連鎖に持っていってもいいかも
+
+## 考えうる目的
+
+- 番組の実力だけでは測れない「競合」というものを考慮した番組評価を行いたい
+- 同時間帯でも「報道とドラマは競合しない」的な知見が得られてもうれしい
+- 統計モデリング & ベイズ推定 or 最尤推定 でオリジナリティが出しやすい？？
+- 
